@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
@@ -21,20 +21,32 @@
         </div>
 
         <nav class="nav-list">
-          <button class="nav-item active" data-view="dashboard">Panel</button>
-          <button class="nav-item" data-view="carga">Nueva solicitud</button>
-          <button class="nav-item" data-view="solicitudes">Base de solicitudes</button>
-          <button class="nav-item" data-view="gestion">Mesa de scoring</button>
+          <button class="nav-item active" data-view="dashboard">
+            <strong>Resumen</strong>
+            <span>Lo importante del dia</span>
+          </button>
+          <button class="nav-item" data-view="carga">
+            <strong>Nueva solicitud</strong>
+            <span>Alta simple para recepcion</span>
+          </button>
+          <button class="nav-item" data-view="solicitudes">
+            <strong>Bandeja operativa</strong>
+            <span>Buscar, filtrar y mover casos</span>
+          </button>
+          <button class="nav-item" data-view="gestion">
+            <strong>Gestionar caso</strong>
+            <span>WhatsApp, llamada y scoring</span>
+          </button>
         </nav>
 
         <div class="sidebar-card">
-          <p class="eyebrow">Como deberia funcionar</p>
-          <ul>
+          <p class="eyebrow">Flujo recomendado</p>
+          <ol class="sidebar-steps">
             <li>Recepcion carga la solicitud.</li>
-            <li>El caso queda visible para cualquier operador.</li>
-            <li>Se puede contactar por WhatsApp o llamada.</li>
-            <li>El scoring se guarda en la misma ficha.</li>
-          </ul>
+            <li>La bandeja muestra quien necesita accion.</li>
+            <li>El operador envia WhatsApp o llama.</li>
+            <li>Se guarda todo en la misma ficha con historial.</li>
+          </ol>
         </div>
       </aside>
 
@@ -42,7 +54,8 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">Operacion diaria</p>
-            <h2 id="view-title">Panel operativo</h2>
+            <h2 id="view-title">Resumen operativo</h2>
+            <p class="topbar-copy">Una sola base para altas, seguimiento y scoring.</p>
           </div>
           <div class="topbar-actions">
             <label class="inline-field">
@@ -63,6 +76,7 @@
                 <option value="Supervisor">Supervisor</option>
               </select>
             </label>
+            <button class="ghost-button" id="refresh-button" type="button">Actualizar</button>
             <button class="ghost-button" id="export-button" type="button">Exportar CSV</button>
           </div>
         </header>
@@ -71,12 +85,12 @@
           <div class="hero-card">
             <div>
               <p class="eyebrow">Mesa unificada</p>
-              <h3>Recepcion, seguimiento y scoring en una sola pantalla</h3>
-              <p class="hero-copy">La idea operativa es clara: un usuario puede cargar la solicitud y otro puede continuarla despues, enviar el mensaje, llamar, tomar respuestas y cerrar el scoring sin perder historial.</p>
+              <h3>Operacion clara para recepcion y contact center</h3>
+              <p class="hero-copy">La pagina ahora queda organizada como una herramienta de uso diario: primero se da de alta, despues se ve en bandeja, y desde la ficha se acciona por WhatsApp o llamada sin perder el contexto del cliente.</p>
             </div>
             <div class="hero-actions">
-              <button class="primary-button" type="button" data-quick-nav="carga">Cargar nueva solicitud</button>
-              <button class="ghost-button" type="button" data-quick-nav="gestion">Ir a la mesa de scoring</button>
+              <button class="primary-button" type="button" data-quick-nav="carga">Cargar solicitud</button>
+              <button class="ghost-button" type="button" id="take-next-button">Tomar siguiente pendiente</button>
             </div>
           </div>
 
@@ -84,31 +98,72 @@
 
           <div class="dashboard-grid">
             <article class="panel-card">
-              <div class="panel-header">
+              <div class="panel-header compact">
                 <div>
-                  <p class="eyebrow">Prioridades de hoy</p>
-                  <h3>Casos a mover</h3>
+                  <p class="eyebrow">Prioridad</p>
+                  <h3>Casos a mover ahora</h3>
                 </div>
+                <button class="ghost-button" type="button" data-quick-nav="solicitudes">Abrir bandeja</button>
               </div>
               <div id="priority-list" class="stack-list"></div>
             </article>
 
             <article class="panel-card">
-              <div class="panel-header">
+              <div class="panel-header compact">
                 <div>
-                  <p class="eyebrow">Actividad reciente</p>
+                  <p class="eyebrow">Actividad</p>
                   <h3>Ultimos movimientos</h3>
                 </div>
+                <button class="ghost-button" type="button" data-quick-nav="gestion">Ir a gestion</button>
               </div>
               <div id="recent-list" class="stack-list"></div>
             </article>
           </div>
 
+          <div class="dashboard-grid">
+            <article class="panel-card">
+              <div class="panel-header compact">
+                <div>
+                  <p class="eyebrow">Nuevos ingresos</p>
+                  <h3>Altas recientes</h3>
+                </div>
+              </div>
+              <div id="new-records-list" class="stack-list"></div>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-header compact">
+                <div>
+                  <p class="eyebrow">Acciones rapidas</p>
+                  <h3>Atajos operativos</h3>
+                </div>
+              </div>
+              <div class="quick-actions-grid">
+                <button class="shortcut-card" type="button" data-quick-nav="carga">
+                  <strong>Nueva carga</strong>
+                  <span>Alta manual para recepcion</span>
+                </button>
+                <button class="shortcut-card" type="button" id="open-pending-button">
+                  <strong>Pendientes</strong>
+                  <span>Ir directo a por contactar</span>
+                </button>
+                <button class="shortcut-card" type="button" id="open-survey-sent-button">
+                  <strong>Encuestas enviadas</strong>
+                  <span>Ver quienes esperan respuesta</span>
+                </button>
+                <button class="shortcut-card" type="button" id="open-review-button">
+                  <strong>Casos a revisar</strong>
+                  <span>Scoring con observaciones</span>
+                </button>
+              </div>
+            </article>
+          </div>
+
           <article class="panel-card panel-spaced">
-            <div class="panel-header">
+            <div class="panel-header compact">
               <div>
-                <p class="eyebrow">Vista rapida</p>
-                <h3>Pipeline operativo</h3>
+                <p class="eyebrow">Pipeline</p>
+                <h3>Vista general del estado</h3>
               </div>
             </div>
             <div id="pipeline-strip" class="pipeline-strip"></div>
@@ -116,82 +171,107 @@
         </section>
 
         <section id="view-carga" class="view">
-          <article class="panel-card">
-            <div class="panel-header compact">
-              <div>
-                <p class="eyebrow">Ingreso manual</p>
-                <h3>Nueva solicitud</h3>
-              </div>
-              <p class="helper-copy">Pensado para recepcion. Se carga una vez y despues el caso ya queda disponible para contacto, scoring y seguimiento.</p>
-            </div>
-
-            <form id="solicitud-form" class="form-layout">
-              <div class="form-section">
-                <h4>Cabecera</h4>
-                <div class="field-grid cols-4">
-                  <label><span>Sede</span><select name="sede" required><option value="Jujuy">Jujuy</option><option value="Salta">Salta</option></select></label>
-                  <label><span>Fecha de ingreso</span><input name="fecha" type="date" required /></label>
-                  <label><span>Fecha de venta</span><input name="fechaVenta" type="date" /></label>
-                  <label><span>Responsable inicial</span><select name="responsable"><option value="Recepcion">Recepcion</option><option value="Contact Center 1">Contact Center 1</option><option value="Contact Center 2">Contact Center 2</option></select></label>
+          <div class="split-layout">
+            <article class="panel-card">
+              <div class="panel-header compact">
+                <div>
+                  <p class="eyebrow">Ingreso manual</p>
+                  <h3>Nueva solicitud</h3>
                 </div>
+                <p class="helper-copy">Carga breve y ordenada. Lo imprescindible para que despues el operador pueda accionar sin tener que volver a pedir datos.</p>
               </div>
 
-              <div class="form-section">
-                <h4>Datos del cliente</h4>
-                <div class="field-grid cols-4">
-                  <label class="span-2"><span>Nombre y apellido</span><input name="nombre" type="text" required /></label>
-                  <label><span>DNI</span><input name="dni" type="text" inputmode="numeric" required /></label>
-                  <label><span>Fecha de nacimiento</span><input name="fechaNacimiento" type="date" /></label>
-                  <label class="span-2"><span>Domicilio</span><input name="domicilio" type="text" /></label>
-                  <label><span>Telefono</span><input name="telefono" type="text" inputmode="tel" required /></label>
-                  <label><span>Mail</span><input name="mail" type="email" /></label>
-                  <label><span>Canal sugerido</span><select name="canalScoring"><option value="WhatsApp">WhatsApp</option><option value="Llamada">Llamada</option><option value="Hibrido">Hibrido</option></select></label>
+              <form id="solicitud-form" class="form-layout">
+                <div class="form-section">
+                  <h4>Cabecera</h4>
+                  <div class="field-grid cols-4">
+                    <label><span>Sede</span><select name="sede" required><option value="Jujuy">Jujuy</option><option value="Salta">Salta</option></select></label>
+                    <label><span>Fecha de ingreso</span><input name="fecha" type="date" required /></label>
+                    <label><span>Fecha de venta</span><input name="fechaVenta" type="date" /></label>
+                    <label><span>Responsable inicial</span><select name="responsable"><option value="Recepcion">Recepcion</option><option value="Contact Center 1">Contact Center 1</option><option value="Contact Center 2">Contact Center 2</option></select></label>
+                  </div>
                 </div>
-              </div>
 
-              <div class="form-section">
-                <h4>Plan y venta</h4>
-                <div class="field-grid cols-4">
-                  <label class="span-2"><span>Modelo suscripto / plan</span><input name="modelo" type="text" required /></label>
-                  <label><span>Tipo de pago</span><input name="tipoPago" type="text" /></label>
-                  <label><span>Nro de solicitud</span><input name="nroSolicitud" type="text" required /></label>
-                  <label><span>Nro de cliente</span><input name="nroCliente" type="text" /></label>
-                  <label><span>1ra cuota</span><input name="primeraCuota" type="text" /></label>
-                  <label><span>Importe cobrado 1ra</span><input name="importePrimera" type="text" /></label>
-                  <label><span>Saldo 1ra cuota</span><input name="saldoPrimera" type="text" /></label>
-                  <label><span>Cuota 2</span><input name="cuotaDos" type="text" /></label>
-                  <label class="span-2"><span>Nombre del vendedor</span><input name="vendedor" type="text" required /></label>
-                  <label><span>Proxima accion</span><select name="proximaAccion"><option value="Preparar contacto">Preparar contacto</option><option value="Enviar encuesta">Enviar encuesta</option><option value="Llamar hoy">Llamar hoy</option></select></label>
-                  <label><span>Estado inicial</span><select name="estado"><option value="Nuevo ingreso">Nuevo ingreso</option><option value="Pendiente contacto">Pendiente contacto</option></select></label>
+                <div class="form-section">
+                  <h4>Datos del cliente</h4>
+                  <div class="field-grid cols-4">
+                    <label class="span-2"><span>Nombre y apellido</span><input name="nombre" type="text" required /></label>
+                    <label><span>DNI</span><input name="dni" type="text" inputmode="numeric" required /></label>
+                    <label><span>Fecha de nacimiento</span><input name="fechaNacimiento" type="date" /></label>
+                    <label class="span-2"><span>Domicilio</span><input name="domicilio" type="text" /></label>
+                    <label><span>Telefono</span><input name="telefono" type="text" inputmode="tel" required /></label>
+                    <label><span>Mail</span><input name="mail" type="email" /></label>
+                    <label><span>Canal sugerido</span><select name="canalScoring"><option value="WhatsApp">WhatsApp</option><option value="Llamada">Llamada</option><option value="Hibrido">Hibrido</option></select></label>
+                  </div>
                 </div>
-              </div>
 
-              <div class="form-section">
-                <h4>Origen y observaciones</h4>
-                <div class="field-grid cols-4 checks-grid">
-                  <label><span>SIAC</span><input name="siac" type="checkbox" checked /></label>
-                  <label><span>TMK</span><input name="tmk" type="checkbox" checked /></label>
-                  <label><span>Salesforce</span><input name="salesforce" type="checkbox" checked /></label>
-                  <label><span>Finalizadas</span><input name="finalizadas" type="checkbox" checked /></label>
+                <div class="form-section">
+                  <h4>Plan y venta</h4>
+                  <div class="field-grid cols-4">
+                    <label class="span-2"><span>Modelo suscripto / plan</span><input name="modelo" type="text" required /></label>
+                    <label><span>Tipo de pago</span><input name="tipoPago" type="text" /></label>
+                    <label><span>Nro de solicitud</span><input name="nroSolicitud" type="text" required /></label>
+                    <label><span>Nro de cliente</span><input name="nroCliente" type="text" /></label>
+                    <label><span>1ra cuota</span><input name="primeraCuota" type="text" /></label>
+                    <label><span>Importe cobrado 1ra</span><input name="importePrimera" type="text" /></label>
+                    <label><span>Saldo 1ra cuota</span><input name="saldoPrimera" type="text" /></label>
+                    <label><span>Cuota 2</span><input name="cuotaDos" type="text" /></label>
+                    <label class="span-2"><span>Nombre del vendedor</span><input name="vendedor" type="text" required /></label>
+                    <label><span>Proxima accion</span><select name="proximaAccion"><option value="Preparar contacto">Preparar contacto</option><option value="Enviar encuesta">Enviar encuesta</option><option value="Llamar hoy">Llamar hoy</option></select></label>
+                    <label><span>Estado inicial</span><select name="estado"><option value="Nuevo ingreso">Nuevo ingreso</option><option value="Pendiente contacto">Pendiente contacto</option></select></label>
+                  </div>
                 </div>
-                <div class="field-grid cols-1 top-gap">
-                  <label><span>Observaciones / beneficio</span><textarea name="observaciones" rows="4"></textarea></label>
-                </div>
-              </div>
 
-              <div class="form-actions">
-                <button type="button" class="ghost-button" id="fill-demo-button">Cargar ejemplo</button>
-                <button type="submit" class="primary-button">Guardar solicitud</button>
+                <div class="form-section">
+                  <h4>Origen y observaciones</h4>
+                  <div class="field-grid cols-4 checks-grid">
+                    <label><span>SIAC</span><input name="siac" type="checkbox" checked /></label>
+                    <label><span>TMK</span><input name="tmk" type="checkbox" checked /></label>
+                    <label><span>Salesforce</span><input name="salesforce" type="checkbox" checked /></label>
+                    <label><span>Finalizadas</span><input name="finalizadas" type="checkbox" checked /></label>
+                  </div>
+                  <div class="field-grid cols-1 top-gap">
+                    <label><span>Observaciones / beneficio</span><textarea name="observaciones" rows="4"></textarea></label>
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button type="button" class="ghost-button" id="fill-demo-button">Cargar ejemplo</button>
+                  <button type="submit" class="primary-button">Guardar solicitud</button>
+                </div>
+              </form>
+            </article>
+
+            <aside class="panel-card helper-panel">
+              <div class="panel-header compact">
+                <div>
+                  <p class="eyebrow">Checklist</p>
+                  <h3>Antes de guardar</h3>
+                </div>
               </div>
-            </form>
-          </article>
+              <div class="stack-list">
+                <article class="stack-card">
+                  <h4>Datos minimos</h4>
+                  <p>Nombre, DNI, telefono, plan y numero de solicitud.</p>
+                </article>
+                <article class="stack-card">
+                  <h4>Canal sugerido</h4>
+                  <p>WhatsApp si el cliente suele responder. Llamada si hay urgencia o dudas.</p>
+                </article>
+                <article class="stack-card">
+                  <h4>Observaciones</h4>
+                  <p>Anota beneficios, promesas o cualquier punto que despues haya que confirmar en scoring.</p>
+                </article>
+              </div>
+            </aside>
+          </div>
         </section>
 
         <section id="view-solicitudes" class="view">
           <article class="panel-card">
             <div class="panel-header compact">
               <div>
-                <p class="eyebrow">Base operativa</p>
+                <p class="eyebrow">Bandeja operativa</p>
                 <h3>Solicitudes</h3>
               </div>
               <div class="toolbar">
@@ -208,6 +288,17 @@
               </div>
             </div>
 
+            <div class="segment-row" id="board-segments">
+              <button class="segment-button active" type="button" data-board-filter="Todos">Todo</button>
+              <button class="segment-button" type="button" data-board-filter="Pendiente contacto">Por contactar</button>
+              <button class="segment-button" type="button" data-board-filter="Encuesta enviada">Encuesta enviada</button>
+              <button class="segment-button" type="button" data-board-filter="Llamada programada">Llamadas</button>
+              <button class="segment-button" type="button" data-board-filter="Scoring en proceso">En revision</button>
+              <button class="segment-button" type="button" data-board-filter="Cerrado">Cerrados</button>
+            </div>
+
+            <div class="board-summary" id="board-summary"></div>
+
             <div class="table-wrap">
               <table>
                 <thead>
@@ -216,6 +307,7 @@
                     <th>Cliente</th>
                     <th>Plan</th>
                     <th>Vendedor</th>
+                    <th>Responsable</th>
                     <th>Canal</th>
                     <th>Estado</th>
                     <th>Resultado</th>
@@ -233,8 +325,8 @@
             <article class="panel-card queue-panel">
               <div class="panel-header compact">
                 <div>
-                  <p class="eyebrow">Cola de trabajo</p>
-                  <h3>Casos activos</h3>
+                  <p class="eyebrow">Mesa de trabajo</p>
+                  <h3>Cola de gestion</h3>
                 </div>
                 <select id="queue-filter">
                   <option value="Activos">Solo activos</option>
@@ -249,9 +341,9 @@
 
             <article class="panel-card detail-panel">
               <div id="empty-detail" class="empty-detail">
-                <p class="eyebrow">Mesa de scoring</p>
-                <h3>Selecciona un cliente para gestionar el caso</h3>
-                <p>Desde aqui la misma persona o otra puede mandar el mensaje, llamar, registrar respuestas y cerrar el scoring.</p>
+                <p class="eyebrow">Gestion</p>
+                <h3>Selecciona un cliente para trabajar el caso</h3>
+                <p>Desde esta ficha podes enviar el mensaje, llamar, registrar respuestas y dejar trazabilidad.</p>
               </div>
 
               <div id="detail-content" class="detail-content hidden">
@@ -289,7 +381,7 @@
                       <label><span>Responsable</span><select id="detail-responsable"><option value="Recepcion">Recepcion</option><option value="Contact Center 1">Contact Center 1</option><option value="Contact Center 2">Contact Center 2</option><option value="Supervisor">Supervisor</option></select></label>
                       <label><span>Canal</span><select id="detail-canal"><option value="WhatsApp">WhatsApp</option><option value="Llamada">Llamada</option><option value="Hibrido">Hibrido</option></select></label>
                       <label><span>Estado</span><select id="detail-estado"><option value="Nuevo ingreso">Nuevo ingreso</option><option value="Pendiente contacto">Pendiente contacto</option><option value="Encuesta enviada">Encuesta enviada</option><option value="Llamada programada">Llamada programada</option><option value="Scoring en proceso">Scoring en proceso</option><option value="Cerrado">Cerrado</option></select></label>
-                      <label><span>Proxima accion</span><select id="detail-proxima"><option value="Preparar contacto">Preparar contacto</option><option value="Enviar encuesta">Enviar encuesta</option><option value="Llamar hoy">Llamar hoy</option><option value="Esperar respuesta">Esperar respuesta</option><option value="Cerrar scoring">Cerrar scoring</option></select></label>
+                      <label><span>Proxima accion</span><select id="detail-proxima"><option value="Preparar contacto">Preparar contacto</option><option value="Enviar encuesta">Enviar encuesta</option><option value="Llamar hoy">Llamar hoy</option><option value="Esperar respuesta">Esperar respuesta</option><option value="Cerrar scoring">Cerrar scoring</option><option value="Caso cerrado">Caso cerrado</option></select></label>
                     </div>
                     <div class="action-row top-gap">
                       <button class="ghost-button" type="button" id="save-ops-button">Guardar operacion</button>
@@ -304,7 +396,7 @@
                       <p class="eyebrow">Scoring</p>
                       <h4>Formulario de gestion</h4>
                     </div>
-                    <p class="helper-copy small">Se puede completar por llamada o despues de que el cliente responda por WhatsApp. El sistema deja motivo y observaciones.</p>
+                    <p class="helper-copy small">Podes usarlo luego de una llamada o como registro final si el cliente contesto la encuesta por WhatsApp.</p>
                   </div>
 
                   <form id="scoring-form" class="scoring-form">

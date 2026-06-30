@@ -31,6 +31,7 @@ const state = {
   sedeFilter: "Todas",
   operatorFilter: "Todos",
   statusFilter: "Todas",
+  boardFilter: "Todos",
   search: "",
   queueFilter: "Activos",
   selectedId: null,
@@ -272,9 +273,11 @@ function replaceStateFromApi(records, gestiones) {
     if (!gestionesById.has(key)) gestionesById.set(key, []);
     gestionesById.get(key).push(gestion);
   });
+
   state.records = (records || [])
     .map((record) => apiRecordToUiRecord(record, gestionesById.get(normalizeText(record.ID)) || []))
     .sort((a, b) => String(b.creadoEn || "").localeCompare(String(a.creadoEn || "")));
+
   if (state.selectedId && !state.records.some((record) => record.id === state.selectedId)) {
     state.selectedId = state.records[0]?.id || null;
   }
@@ -296,16 +299,31 @@ function syncSelectOptions(id, options, selectedValue) {
   }
 }
 
+function getFormField(name) {
+  return document.querySelector(`#solicitud-form [name="${name}"]`);
+}
+
 function applyCatalogs(catalogs) {
   state.catalogs = {
     operadores: Array.isArray(catalogs?.operadores) && catalogs.operadores.length ? catalogs.operadores : [...DEFAULT_OPERATORS],
     canales: Array.isArray(catalogs?.canales) && catalogs.canales.length ? catalogs.canales : [...DEFAULT_CHANNELS],
   };
+
   syncSelectOptions("global-operator-filter", ["Todos", ...state.catalogs.operadores], state.operatorFilter);
   syncSelectOptions("detail-responsable", state.catalogs.operadores, state.catalogs.operadores[0]);
   syncSelectOptions("detail-canal", state.catalogs.canales, state.catalogs.canales[0]);
-  syncSelectOptions("solicitud-responsable", state.catalogs.operadores, state.catalogs.operadores[0]);
-  syncSelectOptions("solicitud-canal", state.catalogs.canales, state.catalogs.canales[0]);
+
+  const formResponsable = getFormField("responsable");
+  if (formResponsable) {
+    formResponsable.innerHTML = state.catalogs.operadores.map((option) => `<option value="${option}">${option}</option>`).join("");
+    formResponsable.value = state.catalogs.operadores[0];
+  }
+
+  const formCanal = getFormField("canalScoring");
+  if (formCanal) {
+    formCanal.innerHTML = state.catalogs.canales.map((option) => `<option value="${option}">${option}</option>`).join("");
+    formCanal.value = state.catalogs.canales[0];
+  }
 }
 
 async function refreshData() {
@@ -332,33 +350,56 @@ async function runMutation(task, successMessage) {
   }
 }
 
-function filteredRecords() {
+function allVisibleRecords() {
   return state.records.filter((record) => {
     const bySede = state.sedeFilter === "Todas" || record.sede === state.sedeFilter;
     const byOperator = state.operatorFilter === "Todos" || record.responsable === state.operatorFilter;
-    const byStatus = state.statusFilter === "Todas" || record.estado === state.statusFilter;
     const query = state.search.trim().toLowerCase();
     const haystack = `${record.nombre} ${record.dni} ${record.nroSolicitud} ${record.vendedor} ${record.modelo}`.toLowerCase();
     const bySearch = !query || haystack.includes(query);
-    return bySede && byOperator && byStatus && bySearch;
+    return bySede && byOperator && bySearch;
+  });
+}
+
+function filteredRecords() {
+  return allVisibleRecords().filter((record) => {
+    const byStatus = state.statusFilter === "Todas" || record.estado === state.statusFilter;
+    const byBoard = state.boardFilter === "Todos" || record.estado === state.boardFilter;
+    return byStatus && byBoard;
   });
 }
 
 function queueRecords() {
-  let records = filteredRecords();
+  let records = allVisibleRecords();
   if (state.queueFilter === "Activos") records = records.filter((record) => record.estado !== "Cerrado");
   if (["WhatsApp", "Llamada", "Hibrido"].includes(state.queueFilter)) records = records.filter((record) => record.canalScoring === state.queueFilter);
   return records.sort((a, b) => STATUS_FLOW.indexOf(a.estado) - STATUS_FLOW.indexOf(b.estado));
 }
 
+function findNextPendingRecord() {
+  return allVisibleRecords()
+    .filter((record) => ["Pendiente contacto", "Nuevo ingreso", "Llamada programada", "Scoring en proceso"].includes(record.estado))
+    .sort((a, b) => STATUS_FLOW.indexOf(a.estado) - STATUS_FLOW.indexOf(b.estado))[0] || null;
+}
+
+function formatStatusHint(status) {
+  if (status === "Pendiente contacto") return "Primera accion pendiente";
+  if (status === "Encuesta enviada") return "Esperando respuesta del cliente";
+  if (status === "Llamada programada") return "Listo para contacto telefonico";
+  if (status === "Scoring en proceso") return "Tiene puntos para revisar";
+  if (status === "Cerrado") return "Caso finalizado";
+  return "Alta recien ingresada";
+}
+
 function renderDashboard() {
-  const records = filteredRecords();
+  const records = allVisibleRecords();
   const stats = [
-    { label: "Solicitudes visibles", value: records.length, hint: "Base filtrada por sede y operador" },
-    { label: "Pendiente contacto", value: records.filter((r) => r.estado === "Pendiente contacto").length, hint: "Listas para mover hoy" },
-    { label: "Encuesta enviada", value: records.filter((r) => r.estado === "Encuesta enviada").length, hint: "Esperando respuesta del cliente" },
-    { label: "Scoring en proceso", value: records.filter((r) => r.estado === "Scoring en proceso").length, hint: "Casos abiertos para gestionar" },
+    { label: "Solicitudes visibles", value: records.length, hint: "Base filtrada por sede y responsable" },
+    { label: "Por contactar", value: records.filter((r) => ["Nuevo ingreso", "Pendiente contacto"].includes(r.estado)).length, hint: "Casos para mover ahora" },
+    { label: "Encuesta enviada", value: records.filter((r) => r.estado === "Encuesta enviada").length, hint: "Pendientes de respuesta" },
+    { label: "En revision", value: records.filter((r) => r.estado === "Scoring en proceso").length, hint: "Necesitan cierre u observacion" },
   ];
+
   document.getElementById("stat-grid").innerHTML = stats.map((item) => `
     <article class="stat-card">
       <p class="eyebrow">${item.label}</p>
@@ -371,11 +412,14 @@ function renderDashboard() {
     .filter((r) => r.estado !== "Cerrado")
     .sort((a, b) => STATUS_FLOW.indexOf(a.estado) - STATUS_FLOW.indexOf(b.estado))
     .slice(0, 5);
+
   document.getElementById("priority-list").innerHTML = priorityList.map((record) => `
     <article class="stack-card">
       <h4>${record.nombre}</h4>
       <p>${record.sede} · ${record.nroSolicitud} · ${record.canalScoring}</p>
+      <p><strong>Estado:</strong> ${record.estado}</p>
       <p><strong>Proxima accion:</strong> ${record.proximaAccion}</p>
+      <button class="action-button" type="button" onclick="openRecord('${record.id}')">Abrir caso</button>
     </article>
   `).join("") || '<article class="stack-card"><h4>Sin pendientes</h4><p>No hay casos activos con los filtros actuales.</p></article>';
 
@@ -383,6 +427,7 @@ function renderDashboard() {
     .flatMap((record) => (record.gestiones || []).map((entry) => ({ ...entry, nombre: record.nombre, solicitud: record.nroSolicitud })))
     .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))
     .slice(0, 5);
+
   document.getElementById("recent-list").innerHTML = recent.map((entry) => `
     <article class="stack-card">
       <h4>${entry.nombre}</h4>
@@ -391,31 +436,67 @@ function renderDashboard() {
     </article>
   `).join("") || '<article class="stack-card"><h4>Sin actividad</h4><p>Todavia no hay movimientos guardados.</p></article>';
 
+  const newest = [...records]
+    .sort((a, b) => String(b.creadoEn || "").localeCompare(String(a.creadoEn || "")))
+    .slice(0, 4);
+
+  document.getElementById("new-records-list").innerHTML = newest.map((record) => `
+    <article class="stack-card">
+      <h4>${record.nombre}</h4>
+      <p>${record.sede} · ${record.nroSolicitud}</p>
+      <p><strong>Ingreso:</strong> ${record.fecha || "-"}</p>
+      <p><strong>Canal sugerido:</strong> ${record.canalScoring}</p>
+    </article>
+  `).join("") || '<article class="stack-card"><h4>Sin ingresos</h4><p>No hay altas recientes para mostrar.</p></article>';
+
   const strip = ["Nuevo ingreso", "Pendiente contacto", "Encuesta enviada", "Scoring en proceso", "Cerrado"];
   document.getElementById("pipeline-strip").innerHTML = strip.map((status) => `
     <article class="pipeline-card">
       <p class="eyebrow">${status}</p>
       <strong>${records.filter((r) => r.estado === status).length}</strong>
-      <p>${pipelineHint(status)}</p>
+      <p>${formatStatusHint(status)}</p>
     </article>
   `).join("");
 }
 
-function pipelineHint(status) {
-  if (status === "Nuevo ingreso") return "Recien cargadas por recepcion.";
-  if (status === "Pendiente contacto") return "Pendientes de primer movimiento.";
-  if (status === "Encuesta enviada") return "Con link y a la espera de respuesta.";
-  if (status === "Scoring en proceso") return "Con gestion humana en curso.";
-  return "Casos listos para archivo o control.";
+function renderBoardSummary() {
+  const records = filteredRecords();
+  const summary = [
+    {
+      title: "Casos visibles",
+      value: records.length,
+      hint: "Con tus filtros actuales",
+    },
+    {
+      title: "Accion inmediata",
+      value: records.filter((record) => ["Nuevo ingreso", "Pendiente contacto", "Llamada programada"].includes(record.estado)).length,
+      hint: "WhatsApp o llamada",
+    },
+    {
+      title: "En seguimiento",
+      value: records.filter((record) => ["Encuesta enviada", "Scoring en proceso"].includes(record.estado)).length,
+      hint: "Esperando o revisando",
+    },
+  ];
+
+  document.getElementById("board-summary").innerHTML = summary.map((item) => `
+    <article class="summary-card">
+      <p class="eyebrow">${item.title}</p>
+      <strong>${item.value}</strong>
+      <p>${item.hint}</p>
+    </article>
+  `).join("");
 }
 
 function renderTable() {
   const body = document.getElementById("solicitudes-table-body");
   if (state.loading) {
-    body.innerHTML = '<tr><td colspan="8">Cargando solicitudes...</td></tr>';
+    body.innerHTML = '<tr><td colspan="9">Cargando solicitudes...</td></tr>';
     return;
   }
-  body.innerHTML = filteredRecords().map((record) => `
+
+  const records = filteredRecords();
+  body.innerHTML = records.map((record) => `
     <tr>
       <td>${record.sede}</td>
       <td>
@@ -425,6 +506,7 @@ function renderTable() {
       </td>
       <td>${record.modelo}</td>
       <td>${record.vendedor}</td>
+      <td>${record.responsable}</td>
       <td>${record.canalScoring}</td>
       <td>${statusBadge(record.estado)}</td>
       <td>${resultBadge(record.resultadoScoring)}</td>
@@ -436,7 +518,7 @@ function renderTable() {
         </div>
       </td>
     </tr>
-  `).join("") || '<tr><td colspan="8">No hay solicitudes para este filtro.</td></tr>';
+  `).join("") || '<tr><td colspan="9">No hay solicitudes para este filtro.</td></tr>';
 }
 
 function renderQueue() {
@@ -445,6 +527,7 @@ function renderQueue() {
     container.innerHTML = '<article class="queue-card"><h4>Cargando</h4><p>Traemos la base desde Sheets.</p></article>';
     return;
   }
+
   container.innerHTML = queueRecords().map((record) => `
     <article class="queue-card ${record.id === state.selectedId ? "active" : ""}" onclick="openRecord('${record.id}')">
       <div class="queue-card-top">
@@ -550,14 +633,17 @@ async function openWhatsApp(id) {
     notify("Este cliente no tiene telefono valido.");
     return;
   }
+
   const message = encodeURIComponent(`Hola ${record.nombre}, te escribimos de Autosol por tu solicitud ${record.nroSolicitud}. Queremos avanzar con el scoring de tu plan. Te compartimos el acceso: ${record.encuestaLink}`);
   window.open(`https://wa.me/54${phone}?text=${message}`, "_blank");
+
   const nextRecord = {
     ...record,
     estado: record.estado === "Nuevo ingreso" ? "Encuesta enviada" : record.estado,
     proximaAccion: "Esperar respuesta",
     ultimaGestion: today(),
   };
+
   const gestion = buildGestionPayload(record.id, "WhatsApp", "Se preparo el mensaje de WhatsApp con acceso a encuesta.", record.responsable);
   await runMutation(() => persistRecord(nextRecord, gestion), "WhatsApp listo y gestion guardada.");
 }
@@ -570,6 +656,7 @@ async function callClient(id) {
     notify("Este cliente no tiene telefono valido.");
     return;
   }
+
   window.location.href = `tel:+54${phone}`;
   const nextRecord = {
     ...record,
@@ -578,6 +665,7 @@ async function callClient(id) {
     ultimaGestion: today(),
     canalScoring: record.canalScoring === "WhatsApp" ? "Hibrido" : record.canalScoring,
   };
+
   const gestion = buildGestionPayload(record.id, "Llamada", "Se disparo una llamada desde la mesa operativa.", record.responsable);
   await runMutation(() => persistRecord(nextRecord, gestion), "Llamada registrada en la ficha.");
 }
@@ -639,6 +727,7 @@ async function saveScoring(event) {
   if (!state.selectedId) return;
   const record = state.records.find((item) => item.id === state.selectedId);
   if (!record) return;
+
   const scoring = calculateScoringFromForm();
   const nextRecord = {
     ...record,
@@ -650,6 +739,7 @@ async function saveScoring(event) {
     proximaAccion: scoring.result === "Paso" ? "Caso cerrado" : "Cerrar scoring",
     ultimaGestion: today(),
   };
+
   const gestion = buildGestionPayload(record.id, "Scoring", `Se guardo scoring con resultado ${scoring.result}. Motivo: ${scoring.reason}.`, record.responsable);
   await runMutation(() => persistRecord(nextRecord, gestion), "Scoring guardado en Sheets.");
 }
@@ -658,6 +748,7 @@ async function saveOperationalChanges() {
   if (!state.selectedId) return;
   const record = state.records.find((item) => item.id === state.selectedId);
   if (!record) return;
+
   const updates = {
     ...record,
     responsable: document.getElementById("detail-responsable").value,
@@ -666,6 +757,7 @@ async function saveOperationalChanges() {
     proximaAccion: document.getElementById("detail-proxima").value,
     ultimaGestion: today(),
   };
+
   const gestion = buildGestionPayload(record.id, "Operacion", `Se actualizaron datos operativos. Estado: ${updates.estado}. Proxima accion: ${updates.proximaAccion}.`, updates.responsable);
   await runMutation(() => persistRecord(updates, gestion), "Cambios operativos guardados.");
 }
@@ -680,6 +772,7 @@ async function advanceSelectedStatus() {
     ultimaGestion: today(),
     proximaAccion: next === "Cerrado" ? "Caso cerrado" : "Continuar gestion",
   };
+
   const gestion = buildGestionPayload(record.id, "Estado", `El caso avanzo a ${next}.`, record.responsable);
   await runMutation(() => persistRecord(nextRecord, gestion), "Estado actualizado.");
 }
@@ -688,9 +781,11 @@ async function addTimelineNote() {
   if (!state.selectedId) return;
   const record = state.records.find((item) => item.id === state.selectedId);
   if (!record) return;
+
   const textarea = document.getElementById("timeline-note");
   const note = textarea.value.trim();
   if (!note) return;
+
   const nextRecord = { ...record, ultimaGestion: today() };
   const gestion = buildGestionPayload(record.id, "Seguimiento", note, record.responsable);
   await runMutation(() => persistRecord(nextRecord, gestion), "Movimiento agregado al historial.");
@@ -738,9 +833,11 @@ function exportCsv() {
     record.motivoResultado,
     record.observaciones,
   ]);
+
   const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${String(cell || "").replace(/"/g, '""')}"`).join(","))
     .join("\n");
+
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -756,6 +853,7 @@ async function createRecord(event) {
   const data = new FormData(form);
   const nombre = normalizeUpper(data.get("nombre"));
   const nroSolicitud = normalizeText(data.get("nroSolicitud"));
+
   const record = {
     id: uid(),
     sede: data.get("sede"),
@@ -793,19 +891,21 @@ async function createRecord(event) {
     respuestas: {},
     creadoEn: new Date().toISOString(),
   };
+
   const gestion = buildGestionPayload(record.id, "Carga", "Se dio de alta la solicitud desde la pantalla de recepcion.", record.responsable);
+
   await runMutation(async () => {
     await apiPostRecords({ action: "createRecord", record: uiRecordToApiRecord(record) });
     await apiPostRecords({ action: "appendGestion", gestion });
   }, "Solicitud creada en Sheets.");
+
   form.reset();
   form.sede.value = "Jujuy";
   form.proximaAccion.value = "Preparar contacto";
   form.estado.value = "Nuevo ingreso";
-  form.responsable.value = state.catalogs.operadores[0] || "Recepcion";
-  form.canalScoring.value = state.catalogs.canales[0] || "WhatsApp";
+  getFormField("responsable").value = state.catalogs.operadores[0] || "Recepcion";
+  getFormField("canalScoring").value = state.catalogs.canales[0] || "WhatsApp";
   state.selectedId = record.id;
-  renderAll();
   switchView("gestion");
 }
 
@@ -814,14 +914,14 @@ function fillDemo() {
   form.sede.value = "Salta";
   form.fecha.value = today();
   form.fechaVenta.value = today();
-  form.responsable.value = state.catalogs.operadores[0] || "Recepcion";
+  getFormField("responsable").value = state.catalogs.operadores[0] || "Recepcion";
   form.nombre.value = "SANCHEZ LORENA CAROLINA";
   form.dni.value = "30111222";
   form.fechaNacimiento.value = "1987-10-14";
   form.domicilio.value = "BARRIO GRAND BOURG 245";
   form.telefono.value = "3875123456";
   form.mail.value = "LORENA.CAROLINA@MAIL.COM";
-  form.canalScoring.value = "Hibrido";
+  getFormField("canalScoring").value = "Hibrido";
   form.modelo.value = "AMAROK PLAN EXCLUSIVO 70-30";
   form.tipoPago.value = "VISA MACRO";
   form.nroSolicitud.value = "1200555";
@@ -844,48 +944,88 @@ function switchView(view) {
   document.querySelectorAll(".view").forEach((section) => {
     section.classList.toggle("active", section.id === `view-${view}`);
   });
+
   document.getElementById("view-title").textContent = {
-    dashboard: "Panel operativo",
+    dashboard: "Resumen operativo",
     carga: "Nueva solicitud",
-    solicitudes: "Base de solicitudes",
-    gestion: "Mesa de scoring",
+    solicitudes: "Bandeja operativa",
+    gestion: "Gestionar caso",
   }[view];
+}
+
+function renderBoardSegments() {
+  document.querySelectorAll("[data-board-filter]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.boardFilter === state.boardFilter);
+  });
 }
 
 function renderAll() {
   renderDashboard();
+  renderBoardSegments();
+  renderBoardSummary();
   renderTable();
   renderQueue();
   renderDetail();
+}
+
+function jumpToBoardFilter(filter) {
+  state.boardFilter = filter;
+  state.statusFilter = "Todas";
+  document.getElementById("status-filter").value = "Todas";
+  switchView("solicitudes");
+  renderAll();
+}
+
+function openNextPending() {
+  const nextRecord = findNextPendingRecord();
+  if (!nextRecord) {
+    notify("No hay casos pendientes con los filtros actuales.");
+    return;
+  }
+  openRecord(nextRecord.id);
 }
 
 function bindEvents() {
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
   });
+
   document.querySelectorAll("[data-quick-nav]").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.quickNav));
   });
+
+  document.querySelectorAll("[data-board-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.boardFilter = button.dataset.boardFilter;
+      renderAll();
+    });
+  });
+
   document.getElementById("global-sede-filter").addEventListener("change", (event) => {
     state.sedeFilter = event.target.value;
     renderAll();
   });
+
   document.getElementById("global-operator-filter").addEventListener("change", (event) => {
     state.operatorFilter = event.target.value;
     renderAll();
   });
+
   document.getElementById("status-filter").addEventListener("change", (event) => {
     state.statusFilter = event.target.value;
     renderAll();
   });
+
   document.getElementById("search-input").addEventListener("input", (event) => {
     state.search = event.target.value;
     renderAll();
   });
+
   document.getElementById("queue-filter").addEventListener("change", (event) => {
     state.queueFilter = event.target.value;
     renderAll();
   });
+
   document.getElementById("solicitud-form").addEventListener("submit", createRecord);
   document.getElementById("fill-demo-button").addEventListener("click", fillDemo);
   document.getElementById("calculate-button").addEventListener("click", calculateScoringFromForm);
@@ -898,6 +1038,11 @@ function bindEvents() {
   document.getElementById("send-whatsapp-button").addEventListener("click", () => openWhatsApp(state.selectedId));
   document.getElementById("call-button").addEventListener("click", () => callClient(state.selectedId));
   document.getElementById("export-button").addEventListener("click", exportCsv);
+  document.getElementById("refresh-button").addEventListener("click", () => refreshData().catch((error) => notify(error.message || error)));
+  document.getElementById("take-next-button").addEventListener("click", openNextPending);
+  document.getElementById("open-pending-button").addEventListener("click", () => jumpToBoardFilter("Pendiente contacto"));
+  document.getElementById("open-survey-sent-button").addEventListener("click", () => jumpToBoardFilter("Encuesta enviada"));
+  document.getElementById("open-review-button").addEventListener("click", () => jumpToBoardFilter("Scoring en proceso"));
 }
 
 async function initApp() {
