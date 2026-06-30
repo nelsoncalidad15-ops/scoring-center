@@ -72,10 +72,10 @@
             <div class="panel-head">
               <div>
                 <p class="eyebrow">Bandeja</p>
-                <h2 id="view-title">Pendientes</h2>
+                <h2>Pendientes</h2>
               </div>
               <div class="toolbar">
-                <input id="search-input" type="search" placeholder="Buscar nombre, DNI, solicitud o vendedor" />
+                <input id="search-input" type="search" placeholder="Buscar nombre, solicitud o vendedor" />
                 <select id="status-filter">
                   <option value="Todas">Todos los estados</option>
                   <option value="Nuevo ingreso">Nuevo ingreso</option>
@@ -108,7 +108,7 @@
                   <tr>
                     <th>Cliente</th>
                     <th>Plan</th>
-                    <th>Vendedor</th>
+                    <th>Asesor</th>
                     <th>Responsable</th>
                     <th>Canal</th>
                     <th>Estado</th>
@@ -133,51 +133,47 @@
 
               <form id="solicitud-form" class="form-layout">
                 <div class="form-section">
-                  <div class="field-grid cols-4">
+                  <div class="field-grid cols-2">
                     <label><span>Sede</span><select name="sede" required><option value="Jujuy">Jujuy</option><option value="Salta">Salta</option></select></label>
-                    <label><span>Fecha ingreso</span><input name="fecha" type="date" required /></label>
-                    <label><span>Fecha venta</span><input name="fechaVenta" type="date" /></label>
                     <label><span>Responsable</span><select name="responsable"><option value="Recepcion">Recepcion</option></select></label>
                   </div>
                 </div>
 
                 <div class="form-section">
-                  <div class="field-grid cols-4">
-                    <label class="span-2"><span>Nombre y apellido</span><input name="nombre" type="text" required /></label>
-                    <label><span>DNI</span><input name="dni" type="text" inputmode="numeric" required /></label>
-                    <label><span>Nacimiento</span><input name="fechaNacimiento" type="date" /></label>
-                    <label class="span-2"><span>Domicilio</span><input name="domicilio" type="text" /></label>
-                    <label><span>Telefono</span><input name="telefono" type="text" inputmode="tel" required /></label>
+                  <div class="field-grid cols-2">
+                    <label><span>Nro de solicitud</span><input name="nroSolicitud" type="text" required /></label>
+                    <label><span>Nombre y Apellido</span><input name="nombre" type="text" required /></label>
+                    <label><span>Celular</span><input name="telefono" type="text" inputmode="tel" required /></label>
                     <label><span>Mail</span><input name="mail" type="email" /></label>
-                    <label><span>Canal</span><select name="canalScoring"><option value="WhatsApp">WhatsApp</option><option value="Llamada">Llamada</option><option value="Hibrido">Hibrido</option></select></label>
-                  </div>
-                </div>
-
-                <div class="form-section">
-                  <div class="field-grid cols-4">
-                    <label class="span-2"><span>Plan</span><input name="modelo" type="text" required /></label>
-                    <label><span>Tipo pago</span><input name="tipoPago" type="text" /></label>
-                    <label><span>Solicitud</span><input name="nroSolicitud" type="text" required /></label>
-                    <label><span>Cliente</span><input name="nroCliente" type="text" /></label>
-                    <label><span>1ra cuota</span><input name="primeraCuota" type="text" /></label>
-                    <label><span>Importe 1ra</span><input name="importePrimera" type="text" /></label>
-                    <label><span>Saldo 1ra</span><input name="saldoPrimera" type="text" /></label>
-                    <label><span>Cuota 2</span><input name="cuotaDos" type="text" /></label>
-                    <label class="span-2"><span>Vendedor</span><input name="vendedor" type="text" required /></label>
-                    <label><span>Proxima accion</span><select name="proximaAccion"><option value="Preparar contacto">Preparar contacto</option><option value="Enviar encuesta">Enviar encuesta</option><option value="Llamar hoy">Llamar hoy</option></select></label>
-                    <label><span>Estado</span><select name="estado"><option value="Nuevo ingreso">Nuevo ingreso</option><option value="Pendiente contacto">Pendiente contacto</option></select></label>
-                  </div>
-                </div>
-
-                <div class="form-section">
-                  <div class="field-grid cols-4 checks-grid">
-                    <label><span>SIAC</span><input name="siac" type="checkbox" checked /></label>
-                    <label><span>TMK</span><input name="tmk" type="checkbox" checked /></label>
-                    <label><span>Salesforce</span><input name="salesforce" type="checkbox" checked /></label>
-                    <label><span>Finalizadas</span><input name="finalizadas" type="checkbox" checked /></label>
+                    <label><span>Modelo suscripto / falta plan</span><input name="modelo" type="text" required /></label>
+                    <label><span>Nombre del Asesor</span><input name="vendedor" type="text" required /></label>
+                    <label><span>Monto 2da cuota (aprox)</span><input name="cuotaDos" type="text" /></label>
+                    <label><span>Como seguira pagando</span><input name="tipoPago" type="text" /></label>
                   </div>
                   <div class="field-grid cols-1 top-gap">
                     <label><span>Observaciones</span><textarea name="observaciones" rows="4"></textarea></label>
+                  </div>
+                </div>
+
+                <input name="fecha" type="hidden" />
+                <input name="fechaVenta" type="hidden" />
+                <input name="dni" type="hidden" />
+                <input name="fechaNacimiento" type="hidden" />
+                <input name="domicilio" type="hidden" />
+                <input name="nroCliente" type="hidden" />
+                <input name="primeraCuota" type="hidden" />
+                <input name="importePrimera" type="hidden" />
+                <input name="saldoPrimera" type="hidden" />
+                <input name="siac" type="hidden" value="on" />
+                <input name="tmk" type="hidden" value="on" />
+                <input name="salesforce" type="hidden" value="on" />
+                <input name="finalizadas" type="hidden" value="on" />
+
+                <div class="form-section compact-strip">
+                  <div class="field-grid cols-3">
+                    <label><span>Canal sugerido</span><select name="canalScoring"><option value="WhatsApp">WhatsApp</option><option value="Llamada">Llamada</option><option value="Hibrido">Hibrido</option></select></label>
+                    <label><span>Proxima accion</span><select name="proximaAccion"><option value="Enviar encuesta">Enviar encuesta</option><option value="Llamar hoy">Llamar hoy</option><option value="Preparar contacto">Preparar contacto</option></select></label>
+                    <label><span>Estado</span><select name="estado"><option value="Pendiente contacto">Pendiente contacto</option><option value="Nuevo ingreso">Nuevo ingreso</option></select></label>
                   </div>
                 </div>
 
@@ -191,22 +187,22 @@
             <aside class="panel-card helper-panel">
               <div class="panel-head">
                 <div>
-                  <p class="eyebrow">Proceso</p>
-                  <h2>Orden de trabajo</h2>
+                  <p class="eyebrow">Uso</p>
+                  <h2>Flujo simple</h2>
                 </div>
               </div>
               <div class="simple-list">
                 <article class="simple-item">
-                  <strong>1. Recepcion carga</strong>
-                  <span>Con los datos que le pasa el vendedor.</span>
+                  <strong>1. Carga recepcion</strong>
+                  <span>Solo los datos que le pasa el asesor.</span>
                 </article>
                 <article class="simple-item">
-                  <strong>2. Se contacta</strong>
-                  <span>Primero WhatsApp con link. Si no, llamada.</span>
+                  <strong>2. WhatsApp o llamada</strong>
+                  <span>Si mandas encuesta no hace falta abrir preguntas.</span>
                 </article>
                 <article class="simple-item">
-                  <strong>3. Se guarda</strong>
-                  <span>Queda todo en una sola ficha.</span>
+                  <strong>3. Guardado final</strong>
+                  <span>Si llamas, ahi si aparece el scoring manual.</span>
                 </article>
               </div>
             </aside>
@@ -263,7 +259,9 @@
                     <div class="action-row">
                       <button class="whatsapp-button" type="button" id="send-whatsapp-button">Enviar WhatsApp</button>
                       <button class="call-button" type="button" id="call-button">Llamar</button>
+                      <button class="ghost-button hidden" type="button" id="manual-mode-button">Continuar llamada</button>
                     </div>
+                    <div class="soft-note" id="contact-flow-note">Si envias la encuesta por WhatsApp, no hace falta abrir las preguntas manuales.</div>
                   </section>
 
                   <section class="mini-card">
@@ -281,43 +279,52 @@
                   </section>
                 </div>
 
-                <section class="panel-subsection">
-                  <div class="panel-head compact-head">
-                    <div>
-                      <p class="eyebrow">Scoring</p>
-                      <h3>Manual</h3>
-                    </div>
+                <section class="panel-subsection call-mode-shell">
+                  <div class="call-mode-off" id="call-mode-off">
+                    <p class="eyebrow">Scoring manual</p>
+                    <h3>Las preguntas aparecen al entrar en llamada</h3>
+                    <p>Este bloque queda oculto hasta que hagas clic en `Llamar` o `Continuar llamada`.</p>
                   </div>
 
-                  <form id="scoring-form" class="scoring-form">
-                    <div class="questions-grid">
-                      <label><span>1. Entendia el plan</span><select name="q1"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Dudas">Dudas</option></select></label>
-                      <label><span>2. Explicaron licitacion</span><select name="q2"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Parcial">Parcial</option></select></label>
-                      <label><span>3. Entendio adjudicacion</span><select name="q3"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="No recuerda">No recuerda</option></select></label>
-                      <label><span>4. Cuota 2 correcta</span><select name="q4"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Difiere">Difiere</option></select></label>
-                      <label><span>5. Pago primera cuota</span><select name="q5"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Pendiente">Pendiente</option></select></label>
-                      <label><span>6. Medio de pago</span><input name="q6" type="text" /></label>
-                      <label><span>7. Reconoce vendedor</span><select name="q7"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Mas o menos">Mas o menos</option></select></label>
-                      <label><span>8. Puntaje vendedor</span><select name="q8"><option value="">Seleccionar</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label>
-                      <label><span>9. Beneficio prometido</span><select name="q9"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="No aplica">No aplica</option></select></label>
-                      <label><span>10. Recontacto</span><select name="q10"><option value="">Seleccionar</option><option value="No">No</option><option value="Si">Si</option></select></label>
+                  <div class="call-mode-on hidden" id="call-mode-on">
+                    <div class="panel-head compact-head">
+                      <div>
+                        <p class="eyebrow">Scoring</p>
+                        <h3>Manual por llamada</h3>
+                      </div>
+                      <span class="mode-pill">Modo llamada</span>
                     </div>
 
-                    <div class="field-grid cols-1 top-gap">
-                      <label><span>Observaciones</span><textarea name="observacionesScoring" rows="4"></textarea></label>
-                    </div>
+                    <form id="scoring-form" class="scoring-form">
+                      <div class="questions-grid">
+                        <label><span>1. Entendia el plan</span><select name="q1"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Dudas">Dudas</option></select></label>
+                        <label><span>2. Explicaron licitacion</span><select name="q2"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Parcial">Parcial</option></select></label>
+                        <label><span>3. Entendio adjudicacion</span><select name="q3"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="No recuerda">No recuerda</option></select></label>
+                        <label><span>4. Cuota 2 correcta</span><select name="q4"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Difiere">Difiere</option></select></label>
+                        <label><span>5. Pago primera cuota</span><select name="q5"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Pendiente">Pendiente</option></select></label>
+                        <label><span>6. Medio de pago</span><input name="q6" type="text" /></label>
+                        <label><span>7. Reconoce vendedor</span><select name="q7"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Mas o menos">Mas o menos</option></select></label>
+                        <label><span>8. Puntaje vendedor</span><select name="q8"><option value="">Seleccionar</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label>
+                        <label><span>9. Beneficio prometido</span><select name="q9"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="No aplica">No aplica</option></select></label>
+                        <label><span>10. Recontacto</span><select name="q10"><option value="">Seleccionar</option><option value="No">No</option><option value="Si">Si</option></select></label>
+                      </div>
 
-                    <div class="field-grid cols-3 top-gap">
-                      <label><span>Resultado</span><input id="result-display" type="text" readonly /></label>
-                      <label><span>Motivo</span><input id="reason-display" type="text" readonly /></label>
-                      <label><span>Recontacto</span><input id="recontact-display" type="text" readonly /></label>
-                    </div>
+                      <div class="field-grid cols-1 top-gap">
+                        <label><span>Observaciones</span><textarea name="observacionesScoring" rows="4"></textarea></label>
+                      </div>
 
-                    <div class="form-actions top-gap">
-                      <button type="button" class="ghost-button" id="calculate-button">Calcular</button>
-                      <button type="submit" class="primary-button">Guardar scoring</button>
-                    </div>
-                  </form>
+                      <div class="field-grid cols-3 top-gap">
+                        <label><span>Resultado</span><input id="result-display" type="text" readonly /></label>
+                        <label><span>Motivo</span><input id="reason-display" type="text" readonly /></label>
+                        <label><span>Recontacto</span><input id="recontact-display" type="text" readonly /></label>
+                      </div>
+
+                      <div class="form-actions top-gap">
+                        <button type="button" class="ghost-button" id="calculate-button">Calcular</button>
+                        <button type="submit" class="primary-button">Guardar scoring</button>
+                      </div>
+                    </form>
+                  </div>
                 </section>
 
                 <section class="panel-subsection">
@@ -353,7 +360,7 @@
                   <tr>
                     <th>Cliente</th>
                     <th>Solicitud</th>
-                    <th>Vendedor</th>
+                    <th>Asesor</th>
                     <th>Motivo</th>
                     <th>Accion</th>
                   </tr>

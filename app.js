@@ -35,6 +35,7 @@ const state = {
   search: "",
   queueFilter: "Activos",
   selectedId: null,
+  callModeRecordId: null,
   catalogs: {
     operadores: [...DEFAULT_OPERATORS],
     canales: [...DEFAULT_CHANNELS],
@@ -99,7 +100,7 @@ function normalizeUpper(value) {
 }
 
 function isAffirmative(value) {
-  return [true, "true", "TRUE", "SI", "Si", "si", "X", "x", 1, "1"].includes(value);
+  return [true, "true", "TRUE", "SI", "Si", "si", "X", "x", 1, "1", "on"].includes(value);
 }
 
 function boolToSheet(value) {
@@ -284,6 +285,9 @@ function replaceStateFromApi(records, gestiones) {
   if (!state.selectedId && state.records.length) {
     state.selectedId = state.records[0].id;
   }
+  if (state.callModeRecordId && !state.records.some((record) => record.id === state.callModeRecordId)) {
+    state.callModeRecordId = null;
+  }
 }
 
 function syncSelectOptions(id, options, selectedValue) {
@@ -408,7 +412,7 @@ function renderTable() {
     <tr>
       <td>
         <strong>${record.nombre}</strong>
-        <div>${record.dni}</div>
+        <div>${record.telefono || "-"}</div>
         <div>${record.nroSolicitud}</div>
       </td>
       <td>${record.modelo}</td>
@@ -439,7 +443,7 @@ function renderRejectedTable() {
     <tr>
       <td>
         <strong>${record.nombre}</strong>
-        <div>${record.dni}</div>
+        <div>${record.telefono || "-"}</div>
       </td>
       <td>${record.nroSolicitud}</td>
       <td>${record.vendedor}</td>
@@ -469,6 +473,14 @@ function renderQueue() {
   `).join("") || '<article class="queue-card"><p>Sin casos.</p></article>';
 }
 
+function renderCallMode(record) {
+  const isCallMode = state.callModeRecordId === record.id;
+  document.getElementById("call-mode-off").classList.toggle("hidden", isCallMode);
+  document.getElementById("call-mode-on").classList.toggle("hidden", !isCallMode);
+  document.getElementById("manual-mode-button").classList.toggle("hidden", isCallMode);
+  document.getElementById("contact-flow-note").classList.toggle("hidden", isCallMode);
+}
+
 function renderDetail() {
   const record = state.records.find((item) => item.id === state.selectedId);
   const empty = document.getElementById("empty-detail");
@@ -492,8 +504,8 @@ function renderDetail() {
   document.getElementById("detail-contact-lines").innerHTML = `
     <div><strong>Telefono:</strong> ${record.telefono || "-"}</div>
     <div><strong>Mail:</strong> ${record.mail || "-"}</div>
-    <div><strong>DNI:</strong> ${record.dni || "-"}</div>
-    <div><strong>Ultima gestion:</strong> ${record.ultimaGestion || "-"}</div>
+    <div><strong>Monto cuota 2:</strong> ${record.cuotaDos || "-"}</div>
+    <div><strong>Pago:</strong> ${record.tipoPago || "-"}</div>
     <div><strong>Observaciones:</strong> ${record.observaciones || "-"}</div>
   `;
 
@@ -525,6 +537,8 @@ function renderDetail() {
       <p>${entry.detalle}</p>
     </article>
   `).join("") || '<article class="timeline-item"><p>Sin movimientos.</p></article>';
+
+  renderCallMode(record);
 }
 
 function setSelectValue(id, value) {
@@ -540,6 +554,16 @@ function nextStatus(current) {
 
 function openRecord(id) {
   state.selectedId = id;
+  if (state.callModeRecordId && state.callModeRecordId !== id) {
+    state.callModeRecordId = null;
+  }
+  switchView("gestion");
+  renderAll();
+}
+
+function enableCallMode(id) {
+  state.selectedId = id;
+  state.callModeRecordId = id;
   switchView("gestion");
   renderAll();
 }
@@ -560,6 +584,7 @@ async function openWhatsApp(id) {
     return;
   }
 
+  state.callModeRecordId = null;
   const message = encodeURIComponent(`Hola ${record.nombre}, te escribimos de Autosol por tu solicitud ${record.nroSolicitud}. Queremos avanzar con el scoring de tu plan. Te compartimos el acceso: ${record.encuestaLink}`);
   window.open(`https://wa.me/54${phone}?text=${message}`, "_blank");
 
@@ -583,16 +608,17 @@ async function callClient(id) {
     return;
   }
 
+  enableCallMode(id);
   window.location.href = `tel:+54${phone}`;
   const nextRecord = {
     ...record,
     estado: "Llamada programada",
     proximaAccion: "Llamar hoy",
     ultimaGestion: today(),
-    canalScoring: record.canalScoring === "WhatsApp" ? "Hibrido" : record.canalScoring,
+    canalScoring: record.canalScoring === "WhatsApp" ? "Hibrido" : "Llamada",
   };
 
-  const gestion = buildGestionPayload(record.id, "Llamada", "Se disparo una llamada desde la mesa operativa.", record.responsable);
+  const gestion = buildGestionPayload(record.id, "Llamada", "Se inicio gestion manual por llamada.", record.responsable);
   await runMutation(() => persistRecord(nextRecord, gestion), "Llamada registrada.");
 }
 
@@ -660,6 +686,7 @@ async function saveScoring(event) {
     estado: scoring.result === "Paso" ? "Cerrado" : "Scoring en proceso",
     proximaAccion: scoring.result === "Paso" ? "Caso cerrado" : "Revisar scoring",
     ultimaGestion: today(),
+    canalScoring: record.canalScoring === "WhatsApp" ? "Hibrido" : "Llamada",
   };
 
   const gestion = buildGestionPayload(record.id, "Scoring", `Se guardo scoring con resultado ${scoring.result}. ${scoring.reason}.`, record.responsable);
@@ -732,10 +759,9 @@ function openSurvey() {
 }
 
 function exportCsv() {
-  const headers = ["NOMBRE", "DNI", "SOLICITUD", "VENDEDOR", "RESPONSABLE", "CANAL", "ESTADO", "RESULTADO", "MOTIVO"];
+  const headers = ["NOMBRE", "SOLICITUD", "ASESOR", "RESPONSABLE", "CANAL", "ESTADO", "RESULTADO", "MOTIVO"];
   const rows = allVisibleRecords().map((record) => [
     record.nombre,
-    record.dni,
     record.nroSolicitud,
     record.vendedor,
     record.responsable,
@@ -768,7 +794,7 @@ async function createRecord(event) {
   const record = {
     id: uid(),
     sede: data.get("sede"),
-    fecha: normalizeDateInput(data.get("fecha")),
+    fecha: normalizeDateInput(data.get("fecha")) || today(),
     fechaVenta: normalizeDateInput(data.get("fechaVenta")),
     nombre,
     dni: normalizeText(data.get("dni")),
@@ -786,10 +812,10 @@ async function createRecord(event) {
     cuotaDos: normalizeText(data.get("cuotaDos")),
     vendedor: normalizeUpper(data.get("vendedor")),
     observaciones: normalizeText(data.get("observaciones")),
-    siac: data.has("siac"),
-    tmk: data.has("tmk"),
-    salesforce: data.has("salesforce"),
-    finalizadas: data.has("finalizadas"),
+    siac: isAffirmative(data.get("siac")),
+    tmk: isAffirmative(data.get("tmk")),
+    salesforce: isAffirmative(data.get("salesforce")),
+    finalizadas: isAffirmative(data.get("finalizadas")),
     responsable: data.get("responsable"),
     canalScoring: data.get("canalScoring"),
     estado: data.get("estado"),
@@ -812,39 +838,33 @@ async function createRecord(event) {
 
   form.reset();
   form.sede.value = "Jujuy";
-  form.proximaAccion.value = "Preparar contacto";
-  form.estado.value = "Nuevo ingreso";
+  getFormField("fecha").value = today();
+  getFormField("proximaAccion").value = "Enviar encuesta";
+  getFormField("estado").value = "Pendiente contacto";
   getFormField("responsable").value = state.catalogs.operadores[0] || "Recepcion";
   getFormField("canalScoring").value = state.catalogs.canales[0] || "WhatsApp";
   state.selectedId = record.id;
+  state.callModeRecordId = null;
   switchView("gestion");
 }
 
 function fillDemo() {
   const form = document.getElementById("solicitud-form");
   form.sede.value = "Salta";
-  form.fecha.value = today();
-  form.fechaVenta.value = today();
+  getFormField("fecha").value = today();
   getFormField("responsable").value = state.catalogs.operadores[0] || "Recepcion";
+  form.nroSolicitud.value = "1200555";
   form.nombre.value = "SANCHEZ LORENA CAROLINA";
-  form.dni.value = "30111222";
-  form.fechaNacimiento.value = "1987-10-14";
-  form.domicilio.value = "BARRIO GRAND BOURG 245";
   form.telefono.value = "3875123456";
   form.mail.value = "LORENA.CAROLINA@MAIL.COM";
-  getFormField("canalScoring").value = "Hibrido";
   form.modelo.value = "AMAROK PLAN EXCLUSIVO 70-30";
-  form.tipoPago.value = "VISA MACRO";
-  form.nroSolicitud.value = "1200555";
-  form.nroCliente.value = "145220";
-  form.primeraCuota.value = "$125.000";
-  form.importePrimera.value = "$125.000";
-  form.saldoPrimera.value = "$0";
-  form.cuotaDos.value = "$445.000";
   form.vendedor.value = "MARIANO PEREZ";
-  form.proximaAccion.value = "Enviar encuesta";
-  form.estado.value = "Pendiente contacto";
+  form.cuotaDos.value = "$445.000";
+  form.tipoPago.value = "VISA MACRO";
   form.observaciones.value = "Cliente con interes en entrega temprana.";
+  getFormField("canalScoring").value = "WhatsApp";
+  getFormField("proximaAccion").value = "Enviar encuesta";
+  getFormField("estado").value = "Pendiente contacto";
 }
 
 function switchView(view) {
@@ -937,6 +957,11 @@ function bindEvents() {
   document.getElementById("open-survey-button").addEventListener("click", openSurvey);
   document.getElementById("send-whatsapp-button").addEventListener("click", () => openWhatsApp(state.selectedId));
   document.getElementById("call-button").addEventListener("click", () => callClient(state.selectedId));
+  document.getElementById("manual-mode-button").addEventListener("click", () => {
+    if (state.selectedId) {
+      enableCallMode(state.selectedId);
+    }
+  });
   document.getElementById("export-button").addEventListener("click", exportCsv);
   document.getElementById("refresh-button").addEventListener("click", () => refreshData().catch((error) => notify(error.message || error)));
   document.getElementById("take-next-button").addEventListener("click", openNextPending);
@@ -947,6 +972,8 @@ function bindEvents() {
 async function initApp() {
   bindEvents();
   applyCatalogs({ operadores: DEFAULT_OPERATORS, canales: DEFAULT_CHANNELS });
+  const fechaField = getFormField("fecha");
+  if (fechaField) fechaField.value = today();
   renderAll();
   try {
     await refreshData();
