@@ -1,4 +1,8 @@
-﻿const STORAGE_KEY = "autosol_scoring_center_v2";
+const API_ENDPOINTS = {
+  records: "/.netlify/functions/records",
+  catalogs: "/.netlify/functions/catalogs",
+};
+
 const SURVEY_BASE_URL = "https://plan-encuesta.netlify.app/?t=";
 const STATUS_FLOW = [
   "Nuevo ingreso",
@@ -18,144 +22,11 @@ const STATUS_INFO = {
   "Cerrado": { className: "status-cerrado", short: "Cerrado" },
 };
 
-const seedData = [
-  {
-    id: uid(),
-    sede: "Jujuy",
-    fecha: "2025-12-06",
-    fechaVenta: "2025-12-06",
-    nombre: "BONILLA JEREMIAS JULIAN",
-    dni: "42814423",
-    fechaNacimiento: "1995-12-28",
-    domicilio: "80 VIVIENDA MZA D CASA 5",
-    mail: "JEREMIASSM58@HOTMAIL.COM",
-    telefono: "3873642560",
-    modelo: "TERA 70-30 ADJ ASEG CTA 8/12/24",
-    tipoPago: "VISA NARANJA",
-    nroSolicitud: "1196609",
-    nroCliente: "59543",
-    primeraCuota: "",
-    importePrimera: "",
-    saldoPrimera: "",
-    cuotaDos: "",
-    vendedor: "ENZO BRANCICH",
-    observaciones: "Cliente cargado por recepcion. Sin contacto aun.",
-    siac: true,
-    tmk: true,
-    salesforce: true,
-    finalizadas: true,
-    responsable: "Recepcion",
-    canalScoring: "WhatsApp",
-    estado: "Pendiente contacto",
-    proximaAccion: "Enviar encuesta",
-    resultadoScoring: "Sin scoring",
-    motivoResultado: "Pendiente de gestion",
-    requiereRecontacto: "No definido",
-    ultimaGestion: "2026-06-29",
-    encuestaLink: buildSurveyLink("1196609", "BONILLA JEREMIAS JULIAN"),
-    respuestas: {},
-    gestiones: [
-      { fecha: "2026-06-29 10:05", tipo: "Carga", detalle: "Recepcion ingreso la solicitud y la dejo lista para contacto." },
-    ],
-    creadoEn: "2026-06-29T10:05:00",
-  },
-  {
-    id: uid(),
-    sede: "Jujuy",
-    fecha: "2025-12-15",
-    fechaVenta: "2025-12-13",
-    nombre: "CHIHAN GILDA NATALIA",
-    dni: "27699927",
-    fechaNacimiento: "1980-02-03",
-    domicilio: "B EL HUAICO MZ 521A CASA 15",
-    mail: "NATALIACHIHAN@GMAIL.COM",
-    telefono: "3874157657",
-    modelo: "TERA 70-30 ADJ ASEG CTA 8/12/24",
-    tipoPago: "VISA MACRO",
-    nroSolicitud: "1197485",
-    nroCliente: "131390",
-    primeraCuota: "",
-    importePrimera: "",
-    saldoPrimera: "",
-    cuotaDos: "$427.501",
-    vendedor: "MARCOS CORBALAN",
-    observaciones: "Bonificacion 1.000.000 en patentamiento.",
-    siac: true,
-    tmk: true,
-    salesforce: true,
-    finalizadas: true,
-    responsable: "Contact Center 1",
-    canalScoring: "WhatsApp",
-    estado: "Encuesta enviada",
-    proximaAccion: "Esperar respuesta",
-    resultadoScoring: "Sin scoring",
-    motivoResultado: "Encuesta enviada y pendiente de respuesta",
-    requiereRecontacto: "No definido",
-    ultimaGestion: "2026-06-29",
-    encuestaLink: buildSurveyLink("1197485", "CHIHAN GILDA NATALIA"),
-    respuestas: {},
-    gestiones: [
-      { fecha: "2026-06-29 09:14", tipo: "WhatsApp", detalle: "Se envio el primer mensaje con acceso a encuesta." },
-    ],
-    creadoEn: "2026-06-29T09:10:00",
-  },
-  {
-    id: uid(),
-    sede: "Salta",
-    fecha: "2025-12-22",
-    fechaVenta: "2025-12-22",
-    nombre: "RODRIGUEZ RICARDO ROBERTO",
-    dni: "27267199",
-    fechaNacimiento: "1979-04-19",
-    domicilio: "BARRIO POLICIAL CALLE 25 DE MAYO",
-    mail: "RICHARDRODRIG123@GMAIL.COM",
-    telefono: "3877418103",
-    modelo: "TERA 70-30 ADJ ASEG CTA 8/12/24",
-    tipoPago: "VISA GALICIA",
-    nroSolicitud: "1198466",
-    nroCliente: "131469",
-    primeraCuota: "",
-    importePrimera: "",
-    saldoPrimera: "",
-    cuotaDos: "$427.501",
-    vendedor: "ARIEL GALLARDO",
-    observaciones: "Beneficio para gastos de entrega y primer service gratis.",
-    siac: true,
-    tmk: true,
-    salesforce: true,
-    finalizadas: true,
-    responsable: "Contact Center 2",
-    canalScoring: "Llamada",
-    estado: "Scoring en proceso",
-    proximaAccion: "Cerrar scoring",
-    resultadoScoring: "Revisar",
-    motivoResultado: "Faltan aclaraciones sobre adjudicacion y cuota 2.",
-    requiereRecontacto: "Si",
-    ultimaGestion: "2026-06-29",
-    encuestaLink: buildSurveyLink("1198466", "RODRIGUEZ RICARDO ROBERTO"),
-    respuestas: {
-      q1: "Si",
-      q2: "Parcial",
-      q3: "No recuerda",
-      q4: "Difiere",
-      q5: "Si",
-      q6: "VISA GALICIA",
-      q7: "Si",
-      q8: "3",
-      q9: "Si",
-      q10: "Si",
-      observacionesScoring: "Pide revisar adjudicacion y dice que la cuota 2 no le quedo clara.",
-    },
-    gestiones: [
-      { fecha: "2026-06-29 11:35", tipo: "Llamada", detalle: "Se realizo llamada y se tomo scoring parcial. Quedaron dudas de cuota 2." },
-      { fecha: "2026-06-29 12:20", tipo: "Seguimiento", detalle: "Se marco recontacto por parte del asesor comercial." },
-    ],
-    creadoEn: "2026-06-29T11:20:00",
-  },
-];
+const DEFAULT_OPERATORS = ["Recepcion", "Contact Center 1", "Contact Center 2", "Supervisor"];
+const DEFAULT_CHANNELS = ["WhatsApp", "Llamada", "Hibrido"];
 
 const state = {
-  records: loadRecords(),
+  records: [],
   currentView: "dashboard",
   sedeFilter: "Todas",
   operatorFilter: "Todos",
@@ -163,6 +34,11 @@ const state = {
   search: "",
   queueFilter: "Activos",
   selectedId: null,
+  catalogs: {
+    operadores: [...DEFAULT_OPERATORS],
+    canales: [...DEFAULT_CHANNELS],
+  },
+  loading: true,
 };
 
 function uid() {
@@ -176,23 +52,284 @@ function buildSurveyLink(nroSolicitud, nombre) {
   return `${SURVEY_BASE_URL}${seed}${clean}`;
 }
 
-function loadRecords() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(seedData));
-    return [...seedData];
+function normalizePhone(value) {
+  return String(value || "").replace(/\D/g, "").replace(/^54/, "");
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function nowStamp() {
+  return new Intl.DateTimeFormat("es-AR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date()).replace(",", "");
+}
+
+function normalizeDateInput(value) {
+  if (!value) return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) return trimmed.slice(0, 10);
+    const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) {
+      const [, day, month, year] = match;
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
   }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+
+function normalizeUpper(value) {
+  return normalizeText(value).toUpperCase();
+}
+
+function isAffirmative(value) {
+  return [true, "true", "TRUE", "SI", "Si", "si", "X", "x", 1, "1"].includes(value);
+}
+
+function boolToSheet(value) {
+  return value ? "SI" : "";
+}
+
+function statusBadge(status) {
+  const info = STATUS_INFO[status] || STATUS_INFO["Nuevo ingreso"];
+  return `<span class="status-chip ${info.className}">${info.short}</span>`;
+}
+
+function resultBadge(result) {
+  if (result === "Paso") return '<span class="status-chip result-paso">Paso</span>';
+  if (result === "Revisar") return '<span class="status-chip result-revisar">Revisar</span>';
+  if (result === "No paso") return '<span class="status-chip result-nopaso">No paso</span>';
+  return '<span class="status-chip neutral-chip">Sin scoring</span>';
+}
+
+function notify(message) {
+  window.alert(message);
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, options);
+  const text = await response.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (error) {
+    throw new Error(text || "Respuesta invalida del servidor.");
+  }
+  if (!response.ok || data.status === "ERROR") {
+    throw new Error(data.message || `Error ${response.status}`);
+  }
+  return data;
+}
+
+async function apiListRecords() {
+  return fetchJson(API_ENDPOINTS.records);
+}
+
+async function apiGetCatalogs() {
+  return fetchJson(API_ENDPOINTS.catalogs);
+}
+
+async function apiPostRecords(payload) {
+  return fetchJson(API_ENDPOINTS.records, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+function apiGestionToUi(gestion) {
+  return {
+    id: normalizeText(gestion.ID_GESTION) || uid(),
+    fecha: normalizeText(gestion.FECHA),
+    tipo: normalizeText(gestion.TIPO),
+    detalle: normalizeText(gestion.DETALLE),
+    responsable: normalizeText(gestion.RESPONSABLE),
+  };
+}
+
+function parseResponses(raw) {
+  if (!raw) return {};
+  if (typeof raw === "object") return raw;
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length ? parsed : [...seedData];
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch (error) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(seedData));
-    return [...seedData];
+    return {};
   }
 }
 
-function saveRecords() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records));
+function apiRecordToUiRecord(record, gestiones) {
+  return {
+    id: normalizeText(record.ID) || uid(),
+    sede: normalizeText(record.SEDE) || "Jujuy",
+    fecha: normalizeDateInput(record.FECHA),
+    fechaVenta: normalizeDateInput(record.FECHA_VENTA),
+    nombre: normalizeUpper(record.NOMBRE),
+    dni: normalizeText(record.DNI),
+    fechaNacimiento: normalizeDateInput(record.FECHA_NACIMIENTO),
+    domicilio: normalizeText(record.DOMICILIO),
+    mail: normalizeUpper(record.MAIL),
+    telefono: normalizeText(record.TELEFONO),
+    modelo: normalizeText(record.MODELO_PLAN),
+    tipoPago: normalizeText(record.TIPO_PAGO),
+    nroSolicitud: normalizeText(record.NRO_SOLICITUD),
+    nroCliente: normalizeText(record.NRO_CLIENTE),
+    primeraCuota: normalizeText(record.PRIMERA_CUOTA),
+    importePrimera: normalizeText(record.IMPORTE_PRIMERA),
+    saldoPrimera: normalizeText(record.SALDO_PRIMERA),
+    cuotaDos: normalizeText(record.CUOTA_DOS),
+    vendedor: normalizeUpper(record.VENDEDOR),
+    observaciones: normalizeText(record.OBSERVACIONES),
+    siac: isAffirmative(record.SIAC),
+    tmk: isAffirmative(record.TMK),
+    salesforce: isAffirmative(record.SALESFORCE),
+    finalizadas: isAffirmative(record.FINALIZADAS),
+    responsable: normalizeText(record.RESPONSABLE) || "Recepcion",
+    canalScoring: normalizeText(record.CANAL_SCORING) || "WhatsApp",
+    estado: normalizeText(record.ESTADO) || "Nuevo ingreso",
+    proximaAccion: normalizeText(record.PROXIMA_ACCION) || "Preparar contacto",
+    resultadoScoring: normalizeText(record.RESULTADO_SCORING) || "Sin scoring",
+    motivoResultado: normalizeText(record.MOTIVO_RESULTADO) || "Pendiente de gestion",
+    requiereRecontacto: normalizeText(record.REQUIERE_RECONTACTO) || "No definido",
+    ultimaGestion: normalizeDateInput(record.ULTIMA_GESTION) || normalizeText(record.ULTIMA_GESTION),
+    encuestaLink: normalizeText(record.ENCUESTA_LINK) || buildSurveyLink(record.NRO_SOLICITUD, record.NOMBRE),
+    respuestas: parseResponses(record.RESPUESTAS_JSON),
+    gestiones: gestiones.map(apiGestionToUi).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))),
+    creadoEn: normalizeText(record.CREADO_EN),
+  };
+}
+
+function uiRecordToApiRecord(record) {
+  return {
+    ID: record.id,
+    SEDE: record.sede,
+    FECHA: record.fecha,
+    FECHA_VENTA: record.fechaVenta,
+    NOMBRE: record.nombre,
+    DNI: record.dni,
+    FECHA_NACIMIENTO: record.fechaNacimiento,
+    DOMICILIO: record.domicilio,
+    MAIL: record.mail,
+    TELEFONO: record.telefono,
+    MODELO_PLAN: record.modelo,
+    TIPO_PAGO: record.tipoPago,
+    NRO_SOLICITUD: record.nroSolicitud,
+    NRO_CLIENTE: record.nroCliente,
+    PRIMERA_CUOTA: record.primeraCuota,
+    IMPORTE_PRIMERA: record.importePrimera,
+    SALDO_PRIMERA: record.saldoPrimera,
+    CUOTA_DOS: record.cuotaDos,
+    VENDEDOR: record.vendedor,
+    OBSERVACIONES: record.observaciones,
+    SIAC: boolToSheet(record.siac),
+    TMK: boolToSheet(record.tmk),
+    SALESFORCE: boolToSheet(record.salesforce),
+    FINALIZADAS: boolToSheet(record.finalizadas),
+    RESPONSABLE: record.responsable,
+    CANAL_SCORING: record.canalScoring,
+    ESTADO: record.estado,
+    PROXIMA_ACCION: record.proximaAccion,
+    RESULTADO_SCORING: record.resultadoScoring,
+    MOTIVO_RESULTADO: record.motivoResultado,
+    REQUIERE_RECONTACTO: record.requiereRecontacto,
+    ULTIMA_GESTION: record.ultimaGestion,
+    ENCUESTA_LINK: record.encuestaLink,
+    RESPUESTAS_JSON: JSON.stringify(record.respuestas || {}),
+    CREADO_EN: record.creadoEn,
+  };
+}
+
+function buildGestionPayload(recordId, tipo, detalle, responsable) {
+  return {
+    ID_GESTION: uid(),
+    ID_SOLICITUD: recordId,
+    FECHA: nowStamp(),
+    TIPO: tipo,
+    DETALLE: detalle,
+    RESPONSABLE: responsable || "Sistema",
+  };
+}
+
+function replaceStateFromApi(records, gestiones) {
+  const gestionesById = new Map();
+  (gestiones || []).forEach((gestion) => {
+    const key = normalizeText(gestion.ID_SOLICITUD);
+    if (!gestionesById.has(key)) gestionesById.set(key, []);
+    gestionesById.get(key).push(gestion);
+  });
+  state.records = (records || [])
+    .map((record) => apiRecordToUiRecord(record, gestionesById.get(normalizeText(record.ID)) || []))
+    .sort((a, b) => String(b.creadoEn || "").localeCompare(String(a.creadoEn || "")));
+  if (state.selectedId && !state.records.some((record) => record.id === state.selectedId)) {
+    state.selectedId = state.records[0]?.id || null;
+  }
+  if (!state.selectedId && state.records.length) {
+    state.selectedId = state.records[0].id;
+  }
+}
+
+function syncSelectOptions(id, options, selectedValue) {
+  const select = document.getElementById(id);
+  if (!select) return;
+  const finalOptions = Array.from(new Set(options.filter(Boolean)));
+  const current = selectedValue || select.value;
+  select.innerHTML = finalOptions.map((option) => `<option value="${option}">${option}</option>`).join("");
+  if (finalOptions.includes(current)) {
+    select.value = current;
+  } else if (finalOptions.length) {
+    select.value = finalOptions[0];
+  }
+}
+
+function applyCatalogs(catalogs) {
+  state.catalogs = {
+    operadores: Array.isArray(catalogs?.operadores) && catalogs.operadores.length ? catalogs.operadores : [...DEFAULT_OPERATORS],
+    canales: Array.isArray(catalogs?.canales) && catalogs.canales.length ? catalogs.canales : [...DEFAULT_CHANNELS],
+  };
+  syncSelectOptions("global-operator-filter", ["Todos", ...state.catalogs.operadores], state.operatorFilter);
+  syncSelectOptions("detail-responsable", state.catalogs.operadores, state.catalogs.operadores[0]);
+  syncSelectOptions("detail-canal", state.catalogs.canales, state.catalogs.canales[0]);
+  syncSelectOptions("solicitud-responsable", state.catalogs.operadores, state.catalogs.operadores[0]);
+  syncSelectOptions("solicitud-canal", state.catalogs.canales, state.catalogs.canales[0]);
+}
+
+async function refreshData() {
+  state.loading = true;
+  renderAll();
+  const [recordsData, catalogsData] = await Promise.all([
+    apiListRecords(),
+    apiGetCatalogs().catch(() => ({ status: "OK", operadores: [...DEFAULT_OPERATORS], canales: [...DEFAULT_CHANNELS] })),
+  ]);
+  replaceStateFromApi(recordsData.records, recordsData.gestiones);
+  applyCatalogs(catalogsData);
+  state.loading = false;
+  renderAll();
+}
+
+async function runMutation(task, successMessage) {
+  try {
+    await task();
+    await refreshData();
+    if (successMessage) notify(successMessage);
+  } catch (error) {
+    console.error(error);
+    notify(`No se pudo guardar: ${error.message || error}`);
+  }
 }
 
 function filteredRecords() {
@@ -212,25 +349,6 @@ function queueRecords() {
   if (state.queueFilter === "Activos") records = records.filter((record) => record.estado !== "Cerrado");
   if (["WhatsApp", "Llamada", "Hibrido"].includes(state.queueFilter)) records = records.filter((record) => record.canalScoring === state.queueFilter);
   return records.sort((a, b) => STATUS_FLOW.indexOf(a.estado) - STATUS_FLOW.indexOf(b.estado));
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("es-AR").format(date);
-}
-
-function statusBadge(status) {
-  const info = STATUS_INFO[status] || STATUS_INFO["Nuevo ingreso"];
-  return `<span class="status-chip ${info.className}">${info.short}</span>`;
-}
-
-function resultBadge(result) {
-  if (result === "Paso") return '<span class="status-chip result-paso">Paso</span>';
-  if (result === "Revisar") return '<span class="status-chip result-revisar">Revisar</span>';
-  if (result === "No paso") return '<span class="status-chip result-nopaso">No paso</span>';
-  return '<span class="status-chip neutral-chip">Sin scoring</span>';
 }
 
 function renderDashboard() {
@@ -273,13 +391,7 @@ function renderDashboard() {
     </article>
   `).join("") || '<article class="stack-card"><h4>Sin actividad</h4><p>Todavia no hay movimientos guardados.</p></article>';
 
-  const strip = [
-    "Nuevo ingreso",
-    "Pendiente contacto",
-    "Encuesta enviada",
-    "Scoring en proceso",
-    "Cerrado",
-  ];
+  const strip = ["Nuevo ingreso", "Pendiente contacto", "Encuesta enviada", "Scoring en proceso", "Cerrado"];
   document.getElementById("pipeline-strip").innerHTML = strip.map((status) => `
     <article class="pipeline-card">
       <p class="eyebrow">${status}</p>
@@ -299,6 +411,10 @@ function pipelineHint(status) {
 
 function renderTable() {
   const body = document.getElementById("solicitudes-table-body");
+  if (state.loading) {
+    body.innerHTML = '<tr><td colspan="8">Cargando solicitudes...</td></tr>';
+    return;
+  }
   body.innerHTML = filteredRecords().map((record) => `
     <tr>
       <td>${record.sede}</td>
@@ -325,6 +441,10 @@ function renderTable() {
 
 function renderQueue() {
   const container = document.getElementById("queue-list");
+  if (state.loading) {
+    container.innerHTML = '<article class="queue-card"><h4>Cargando</h4><p>Traemos la base desde Sheets.</p></article>';
+    return;
+  }
   container.innerHTML = queueRecords().map((record) => `
     <article class="queue-card ${record.id === state.selectedId ? "active" : ""}" onclick="openRecord('${record.id}')">
       <div class="queue-card-top">
@@ -353,7 +473,6 @@ function renderDetail() {
 
   empty.classList.add("hidden");
   detail.classList.remove("hidden");
-
   document.getElementById("detail-sede").textContent = `${record.sede} · Solicitud ${record.nroSolicitud}`;
   document.getElementById("detail-name").textContent = record.nombre;
   document.getElementById("detail-plan").textContent = `${record.modelo} · Vendedor ${record.vendedor}`;
@@ -368,8 +487,8 @@ function renderDetail() {
     <div><strong>Observaciones:</strong> ${record.observaciones || "Sin observaciones"}</div>
   `;
 
-  setSelectValue("detail-responsable", record.responsable || "Recepcion");
-  setSelectValue("detail-canal", record.canalScoring || "WhatsApp");
+  setSelectValue("detail-responsable", record.responsable || state.catalogs.operadores[0] || "Recepcion");
+  setSelectValue("detail-canal", record.canalScoring || state.catalogs.canales[0] || "WhatsApp");
   setSelectValue("detail-estado", record.estado || "Nuevo ingreso");
   setSelectValue("detail-proxima", record.proximaAccion || "Preparar contacto");
 
@@ -392,17 +511,10 @@ function renderDetail() {
 
   document.getElementById("timeline-list").innerHTML = (record.gestiones || []).slice().reverse().map((entry) => `
     <article class="timeline-item">
-      <small>${entry.fecha} · ${entry.tipo}</small>
+      <small>${entry.fecha} · ${entry.tipo}${entry.responsable ? ` · ${entry.responsable}` : ""}</small>
       <p>${entry.detalle}</p>
     </article>
   `).join("") || '<article class="timeline-item"><p>Sin movimientos registrados.</p></article>';
-}
-
-function openRecord(id) {
-  state.selectedId = id;
-  switchView("gestion");
-  renderQueue();
-  renderDetail();
 }
 
 function setSelectValue(id, value) {
@@ -416,60 +528,58 @@ function nextStatus(current) {
   return STATUS_FLOW[index + 1];
 }
 
-function openWhatsApp(id) {
+function openRecord(id) {
+  state.selectedId = id;
+  switchView("gestion");
+  renderQueue();
+  renderDetail();
+}
+
+async function persistRecord(record, gestion) {
+  await apiPostRecords({ action: "updateRecord", record: uiRecordToApiRecord(record) });
+  if (gestion) {
+    await apiPostRecords({ action: "appendGestion", gestion });
+  }
+}
+
+async function openWhatsApp(id) {
   const record = state.records.find((item) => item.id === id);
   if (!record) return;
   const phone = normalizePhone(record.telefono);
+  if (!phone) {
+    notify("Este cliente no tiene telefono valido.");
+    return;
+  }
   const message = encodeURIComponent(`Hola ${record.nombre}, te escribimos de Autosol por tu solicitud ${record.nroSolicitud}. Queremos avanzar con el scoring de tu plan. Te compartimos el acceso: ${record.encuestaLink}`);
-  if (!phone) return;
   window.open(`https://wa.me/54${phone}?text=${message}`, "_blank");
-  pushGestion(id, "WhatsApp", "Se preparo el mensaje de WhatsApp con acceso a encuesta.");
-  patchRecord(id, { estado: record.estado === "Nuevo ingreso" ? "Encuesta enviada" : record.estado, proximaAccion: "Esperar respuesta", ultimaGestion: today() });
+  const nextRecord = {
+    ...record,
+    estado: record.estado === "Nuevo ingreso" ? "Encuesta enviada" : record.estado,
+    proximaAccion: "Esperar respuesta",
+    ultimaGestion: today(),
+  };
+  const gestion = buildGestionPayload(record.id, "WhatsApp", "Se preparo el mensaje de WhatsApp con acceso a encuesta.", record.responsable);
+  await runMutation(() => persistRecord(nextRecord, gestion), "WhatsApp listo y gestion guardada.");
 }
 
-function callClient(id) {
+async function callClient(id) {
   const record = state.records.find((item) => item.id === id);
   if (!record) return;
   const phone = normalizePhone(record.telefono);
-  if (!phone) return;
+  if (!phone) {
+    notify("Este cliente no tiene telefono valido.");
+    return;
+  }
   window.location.href = `tel:+54${phone}`;
-  pushGestion(id, "Llamada", "Se disparo una llamada desde la mesa operativa.");
-  patchRecord(id, { estado: "Llamada programada", proximaAccion: "Llamar hoy", ultimaGestion: today(), canalScoring: record.canalScoring === "WhatsApp" ? "Hibrido" : record.canalScoring });
-}
-
-function normalizePhone(value) {
-  return String(value || "").replace(/\D/g, "").replace(/^54/, "");
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function nowStamp() {
-  return new Intl.DateTimeFormat("es-AR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date()).replace(",", "");
-}
-
-function patchRecord(id, updates) {
-  state.records = state.records.map((record) => record.id === id ? { ...record, ...updates } : record);
-  saveRecords();
-  renderAll();
-}
-
-function pushGestion(id, tipo, detalle) {
-  state.records = state.records.map((record) => {
-    if (record.id !== id) return record;
-    const gestiones = Array.isArray(record.gestiones) ? [...record.gestiones] : [];
-    gestiones.push({ fecha: nowStamp(), tipo, detalle });
-    return { ...record, gestiones };
-  });
-  saveRecords();
+  const nextRecord = {
+    ...record,
+    estado: "Llamada programada",
+    proximaAccion: "Llamar hoy",
+    ultimaGestion: today(),
+    canalScoring: record.canalScoring === "WhatsApp" ? "Hibrido" : record.canalScoring,
+  };
+  const gestion = buildGestionPayload(record.id, "Llamada", "Se disparo una llamada desde la mesa operativa.", record.responsable);
+  await runMutation(() => persistRecord(nextRecord, gestion), "Llamada registrada en la ficha.");
 }
 
 function calculateScoringFromForm() {
@@ -524,64 +634,78 @@ function calculateScoringFromForm() {
   return { respuestas, result, reason, recontacto };
 }
 
-function saveScoring(event) {
+async function saveScoring(event) {
   event.preventDefault();
   if (!state.selectedId) return;
+  const record = state.records.find((item) => item.id === state.selectedId);
+  if (!record) return;
   const scoring = calculateScoringFromForm();
-  state.records = state.records.map((record) => {
-    if (record.id !== state.selectedId) return record;
-    return {
-      ...record,
-      respuestas: scoring.respuestas,
-      resultadoScoring: scoring.result,
-      motivoResultado: scoring.reason,
-      requiereRecontacto: scoring.recontacto,
-      estado: scoring.result === "Paso" ? "Cerrado" : "Scoring en proceso",
-      proximaAccion: scoring.result === "Paso" ? "Caso cerrado" : "Cerrar scoring",
-      ultimaGestion: today(),
-    };
-  });
-  pushGestion(state.selectedId, "Scoring", `Se guardo scoring con resultado ${scoring.result}. Motivo: ${scoring.reason}.`);
-  saveRecords();
-  renderAll();
+  const nextRecord = {
+    ...record,
+    respuestas: scoring.respuestas,
+    resultadoScoring: scoring.result,
+    motivoResultado: scoring.reason,
+    requiereRecontacto: scoring.recontacto,
+    estado: scoring.result === "Paso" ? "Cerrado" : "Scoring en proceso",
+    proximaAccion: scoring.result === "Paso" ? "Caso cerrado" : "Cerrar scoring",
+    ultimaGestion: today(),
+  };
+  const gestion = buildGestionPayload(record.id, "Scoring", `Se guardo scoring con resultado ${scoring.result}. Motivo: ${scoring.reason}.`, record.responsable);
+  await runMutation(() => persistRecord(nextRecord, gestion), "Scoring guardado en Sheets.");
 }
 
-function saveOperationalChanges() {
+async function saveOperationalChanges() {
   if (!state.selectedId) return;
+  const record = state.records.find((item) => item.id === state.selectedId);
+  if (!record) return;
   const updates = {
+    ...record,
     responsable: document.getElementById("detail-responsable").value,
     canalScoring: document.getElementById("detail-canal").value,
     estado: document.getElementById("detail-estado").value,
     proximaAccion: document.getElementById("detail-proxima").value,
     ultimaGestion: today(),
   };
-  patchRecord(state.selectedId, updates);
-  pushGestion(state.selectedId, "Operacion", `Se actualizaron datos operativos. Estado: ${updates.estado}. Proxima accion: ${updates.proximaAccion}.`);
+  const gestion = buildGestionPayload(record.id, "Operacion", `Se actualizaron datos operativos. Estado: ${updates.estado}. Proxima accion: ${updates.proximaAccion}.`, updates.responsable);
+  await runMutation(() => persistRecord(updates, gestion), "Cambios operativos guardados.");
 }
 
-function advanceSelectedStatus() {
+async function advanceSelectedStatus() {
   const record = state.records.find((item) => item.id === state.selectedId);
   if (!record) return;
   const next = nextStatus(record.estado);
-  patchRecord(record.id, { estado: next, ultimaGestion: today(), proximaAccion: next === "Cerrado" ? "Caso cerrado" : "Continuar gestion" });
-  pushGestion(record.id, "Estado", `El caso avanzo a ${next}.`);
+  const nextRecord = {
+    ...record,
+    estado: next,
+    ultimaGestion: today(),
+    proximaAccion: next === "Cerrado" ? "Caso cerrado" : "Continuar gestion",
+  };
+  const gestion = buildGestionPayload(record.id, "Estado", `El caso avanzo a ${next}.`, record.responsable);
+  await runMutation(() => persistRecord(nextRecord, gestion), "Estado actualizado.");
 }
 
-function addTimelineNote() {
+async function addTimelineNote() {
   if (!state.selectedId) return;
+  const record = state.records.find((item) => item.id === state.selectedId);
+  if (!record) return;
   const textarea = document.getElementById("timeline-note");
   const note = textarea.value.trim();
   if (!note) return;
-  pushGestion(state.selectedId, "Seguimiento", note);
+  const nextRecord = { ...record, ultimaGestion: today() };
+  const gestion = buildGestionPayload(record.id, "Seguimiento", note, record.responsable);
+  await runMutation(() => persistRecord(nextRecord, gestion), "Movimiento agregado al historial.");
   textarea.value = "";
-  renderAll();
 }
 
-function copySurveyLink() {
+async function copySurveyLink() {
   const record = state.records.find((item) => item.id === state.selectedId);
   if (!record) return;
-  navigator.clipboard.writeText(record.encuestaLink);
-  pushGestion(record.id, "Link", "Se copio el link de encuesta para compartir al cliente.");
+  try {
+    await navigator.clipboard.writeText(record.encuestaLink);
+    notify("Link copiado.");
+  } catch (error) {
+    notify("No se pudo copiar el link.");
+  }
 }
 
 function openSurvey() {
@@ -626,33 +750,33 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
-function createRecord(event) {
+async function createRecord(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = new FormData(form);
-  const nombre = String(data.get("nombre") || "").trim().toUpperCase();
-  const nroSolicitud = String(data.get("nroSolicitud") || "").trim();
+  const nombre = normalizeUpper(data.get("nombre"));
+  const nroSolicitud = normalizeText(data.get("nroSolicitud"));
   const record = {
     id: uid(),
     sede: data.get("sede"),
-    fecha: data.get("fecha"),
-    fechaVenta: data.get("fechaVenta"),
+    fecha: normalizeDateInput(data.get("fecha")),
+    fechaVenta: normalizeDateInput(data.get("fechaVenta")),
     nombre,
-    dni: String(data.get("dni") || "").trim(),
-    fechaNacimiento: data.get("fechaNacimiento"),
-    domicilio: String(data.get("domicilio") || "").trim(),
-    mail: String(data.get("mail") || "").trim().toUpperCase(),
-    telefono: String(data.get("telefono") || "").trim(),
-    modelo: String(data.get("modelo") || "").trim(),
-    tipoPago: String(data.get("tipoPago") || "").trim(),
+    dni: normalizeText(data.get("dni")),
+    fechaNacimiento: normalizeDateInput(data.get("fechaNacimiento")),
+    domicilio: normalizeText(data.get("domicilio")),
+    mail: normalizeUpper(data.get("mail")),
+    telefono: normalizeText(data.get("telefono")),
+    modelo: normalizeText(data.get("modelo")),
+    tipoPago: normalizeText(data.get("tipoPago")),
     nroSolicitud,
-    nroCliente: String(data.get("nroCliente") || "").trim(),
-    primeraCuota: String(data.get("primeraCuota") || "").trim(),
-    importePrimera: String(data.get("importePrimera") || "").trim(),
-    saldoPrimera: String(data.get("saldoPrimera") || "").trim(),
-    cuotaDos: String(data.get("cuotaDos") || "").trim(),
-    vendedor: String(data.get("vendedor") || "").trim().toUpperCase(),
-    observaciones: String(data.get("observaciones") || "").trim(),
+    nroCliente: normalizeText(data.get("nroCliente")),
+    primeraCuota: normalizeText(data.get("primeraCuota")),
+    importePrimera: normalizeText(data.get("importePrimera")),
+    saldoPrimera: normalizeText(data.get("saldoPrimera")),
+    cuotaDos: normalizeText(data.get("cuotaDos")),
+    vendedor: normalizeUpper(data.get("vendedor")),
+    observaciones: normalizeText(data.get("observaciones")),
     siac: data.has("siac"),
     tmk: data.has("tmk"),
     salesforce: data.has("salesforce"),
@@ -667,18 +791,19 @@ function createRecord(event) {
     ultimaGestion: today(),
     encuestaLink: buildSurveyLink(nroSolicitud, nombre),
     respuestas: {},
-    gestiones: [
-      { fecha: nowStamp(), tipo: "Carga", detalle: "Se dio de alta la solicitud desde la pantalla de recepcion." },
-    ],
     creadoEn: new Date().toISOString(),
   };
-  state.records.unshift(record);
-  saveRecords();
+  const gestion = buildGestionPayload(record.id, "Carga", "Se dio de alta la solicitud desde la pantalla de recepcion.", record.responsable);
+  await runMutation(async () => {
+    await apiPostRecords({ action: "createRecord", record: uiRecordToApiRecord(record) });
+    await apiPostRecords({ action: "appendGestion", gestion });
+  }, "Solicitud creada en Sheets.");
   form.reset();
   form.sede.value = "Jujuy";
-  form.canalScoring.value = "WhatsApp";
   form.proximaAccion.value = "Preparar contacto";
   form.estado.value = "Nuevo ingreso";
+  form.responsable.value = state.catalogs.operadores[0] || "Recepcion";
+  form.canalScoring.value = state.catalogs.canales[0] || "WhatsApp";
   state.selectedId = record.id;
   renderAll();
   switchView("gestion");
@@ -689,7 +814,7 @@ function fillDemo() {
   form.sede.value = "Salta";
   form.fecha.value = today();
   form.fechaVenta.value = today();
-  form.responsable.value = "Recepcion";
+  form.responsable.value = state.catalogs.operadores[0] || "Recepcion";
   form.nombre.value = "SANCHEZ LORENA CAROLINA";
   form.dni.value = "30111222";
   form.fechaNacimiento.value = "1987-10-14";
@@ -775,8 +900,21 @@ function bindEvents() {
   document.getElementById("export-button").addEventListener("click", exportCsv);
 }
 
-bindEvents();
-renderAll();
+async function initApp() {
+  bindEvents();
+  applyCatalogs({ operadores: DEFAULT_OPERATORS, canales: DEFAULT_CHANNELS });
+  renderAll();
+  try {
+    await refreshData();
+  } catch (error) {
+    state.loading = false;
+    renderAll();
+    console.error(error);
+    notify(`No pude conectar la app con Sheets. Revisemos APPS_SCRIPT_URL, BACKEND_SECRET y el deploy del Apps Script. Detalle: ${error.message || error}`);
+  }
+}
+
+initApp();
 
 window.openRecord = openRecord;
 window.openWhatsApp = openWhatsApp;

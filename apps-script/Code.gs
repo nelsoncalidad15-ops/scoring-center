@@ -1,4 +1,4 @@
-﻿const SHEET_NAMES = {
+const SHEET_NAMES = {
   JUJUY: "Solicitudes_Jujuy",
   SALTA: "Solicitudes_Salta",
   GESTIONES: "Gestiones_Scoring",
@@ -39,6 +39,7 @@ const HEADERS = [
   "REQUIERE_RECONTACTO",
   "ULTIMA_GESTION",
   "ENCUESTA_LINK",
+  "RESPUESTAS_JSON",
   "CREADO_EN"
 ];
 
@@ -83,12 +84,11 @@ function ensureSetup() {
 function ensureSheet(name, headers) {
   var ss = getSpreadsheet();
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
-  if (sheet.getLastRow() === 0 || sheet.getLastColumn() === 0) {
-    sheet.clear();
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    sheet.setFrozenRows(1);
-    return;
+  if (sheet.getMaxColumns() < headers.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
   }
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.setFrozenRows(1);
 }
 
 function seedCatalogs() {
