@@ -1,4 +1,4 @@
-﻿# Scoring Cent
+# Scoring Cent
 
 Sistema interno de recepcion y Contact Center para carga, contacto y scoring de solicitudes.
 
