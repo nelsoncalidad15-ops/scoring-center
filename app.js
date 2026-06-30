@@ -27,7 +27,7 @@ const DEFAULT_CHANNELS = ["WhatsApp", "Llamada", "Hibrido"];
 
 const state = {
   records: [],
-  currentView: "dashboard",
+  currentView: "pendientes",
   sedeFilter: "Todas",
   operatorFilter: "Todos",
   statusFilter: "Todas",
@@ -369,136 +369,43 @@ function filteredRecords() {
   });
 }
 
+function pendingRecords() {
+  return filteredRecords().filter((record) => record.resultadoScoring !== "No paso");
+}
+
+function rejectedRecords() {
+  return allVisibleRecords().filter((record) => record.resultadoScoring === "No paso");
+}
+
 function queueRecords() {
-  let records = allVisibleRecords();
+  let records = allVisibleRecords().filter((record) => record.resultadoScoring !== "No paso");
   if (state.queueFilter === "Activos") records = records.filter((record) => record.estado !== "Cerrado");
   if (["WhatsApp", "Llamada", "Hibrido"].includes(state.queueFilter)) records = records.filter((record) => record.canalScoring === state.queueFilter);
   return records.sort((a, b) => STATUS_FLOW.indexOf(a.estado) - STATUS_FLOW.indexOf(b.estado));
 }
 
 function findNextPendingRecord() {
-  return allVisibleRecords()
-    .filter((record) => ["Pendiente contacto", "Nuevo ingreso", "Llamada programada", "Scoring en proceso"].includes(record.estado))
-    .sort((a, b) => STATUS_FLOW.indexOf(a.estado) - STATUS_FLOW.indexOf(b.estado))[0] || null;
+  return queueRecords().find((record) => ["Nuevo ingreso", "Pendiente contacto", "Llamada programada", "Scoring en proceso", "Encuesta enviada"].includes(record.estado)) || null;
 }
 
-function formatStatusHint(status) {
-  if (status === "Pendiente contacto") return "Primera accion pendiente";
-  if (status === "Encuesta enviada") return "Esperando respuesta del cliente";
-  if (status === "Llamada programada") return "Listo para contacto telefonico";
-  if (status === "Scoring en proceso") return "Tiene puntos para revisar";
-  if (status === "Cerrado") return "Caso finalizado";
-  return "Alta recien ingresada";
-}
-
-function renderDashboard() {
-  const records = allVisibleRecords();
-  const stats = [
-    { label: "Solicitudes visibles", value: records.length, hint: "Base filtrada por sede y responsable" },
-    { label: "Por contactar", value: records.filter((r) => ["Nuevo ingreso", "Pendiente contacto"].includes(r.estado)).length, hint: "Casos para mover ahora" },
-    { label: "Encuesta enviada", value: records.filter((r) => r.estado === "Encuesta enviada").length, hint: "Pendientes de respuesta" },
-    { label: "En revision", value: records.filter((r) => r.estado === "Scoring en proceso").length, hint: "Necesitan cierre u observacion" },
-  ];
-
-  document.getElementById("stat-grid").innerHTML = stats.map((item) => `
-    <article class="stat-card">
-      <p class="eyebrow">${item.label}</p>
-      <strong>${item.value}</strong>
-      <span>${item.hint}</span>
-    </article>
-  `).join("");
-
-  const priorityList = records
-    .filter((r) => r.estado !== "Cerrado")
-    .sort((a, b) => STATUS_FLOW.indexOf(a.estado) - STATUS_FLOW.indexOf(b.estado))
-    .slice(0, 5);
-
-  document.getElementById("priority-list").innerHTML = priorityList.map((record) => `
-    <article class="stack-card">
-      <h4>${record.nombre}</h4>
-      <p>${record.sede} · ${record.nroSolicitud} · ${record.canalScoring}</p>
-      <p><strong>Estado:</strong> ${record.estado}</p>
-      <p><strong>Proxima accion:</strong> ${record.proximaAccion}</p>
-      <button class="action-button" type="button" onclick="openRecord('${record.id}')">Abrir caso</button>
-    </article>
-  `).join("") || '<article class="stack-card"><h4>Sin pendientes</h4><p>No hay casos activos con los filtros actuales.</p></article>';
-
-  const recent = [...records]
-    .flatMap((record) => (record.gestiones || []).map((entry) => ({ ...entry, nombre: record.nombre, solicitud: record.nroSolicitud })))
-    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))
-    .slice(0, 5);
-
-  document.getElementById("recent-list").innerHTML = recent.map((entry) => `
-    <article class="stack-card">
-      <h4>${entry.nombre}</h4>
-      <p>${entry.fecha} · Solicitud ${entry.solicitud}</p>
-      <p>${entry.detalle}</p>
-    </article>
-  `).join("") || '<article class="stack-card"><h4>Sin actividad</h4><p>Todavia no hay movimientos guardados.</p></article>';
-
-  const newest = [...records]
-    .sort((a, b) => String(b.creadoEn || "").localeCompare(String(a.creadoEn || "")))
-    .slice(0, 4);
-
-  document.getElementById("new-records-list").innerHTML = newest.map((record) => `
-    <article class="stack-card">
-      <h4>${record.nombre}</h4>
-      <p>${record.sede} · ${record.nroSolicitud}</p>
-      <p><strong>Ingreso:</strong> ${record.fecha || "-"}</p>
-      <p><strong>Canal sugerido:</strong> ${record.canalScoring}</p>
-    </article>
-  `).join("") || '<article class="stack-card"><h4>Sin ingresos</h4><p>No hay altas recientes para mostrar.</p></article>';
-
-  const strip = ["Nuevo ingreso", "Pendiente contacto", "Encuesta enviada", "Scoring en proceso", "Cerrado"];
-  document.getElementById("pipeline-strip").innerHTML = strip.map((status) => `
-    <article class="pipeline-card">
-      <p class="eyebrow">${status}</p>
-      <strong>${records.filter((r) => r.estado === status).length}</strong>
-      <p>${formatStatusHint(status)}</p>
-    </article>
-  `).join("");
-}
-
-function renderBoardSummary() {
-  const records = filteredRecords();
-  const summary = [
-    {
-      title: "Casos visibles",
-      value: records.length,
-      hint: "Con tus filtros actuales",
-    },
-    {
-      title: "Accion inmediata",
-      value: records.filter((record) => ["Nuevo ingreso", "Pendiente contacto", "Llamada programada"].includes(record.estado)).length,
-      hint: "WhatsApp o llamada",
-    },
-    {
-      title: "En seguimiento",
-      value: records.filter((record) => ["Encuesta enviada", "Scoring en proceso"].includes(record.estado)).length,
-      hint: "Esperando o revisando",
-    },
-  ];
-
-  document.getElementById("board-summary").innerHTML = summary.map((item) => `
-    <article class="summary-card">
-      <p class="eyebrow">${item.title}</p>
-      <strong>${item.value}</strong>
-      <p>${item.hint}</p>
-    </article>
-  `).join("");
+function renderMetrics() {
+  const visible = allVisibleRecords();
+  document.getElementById("metric-contactar").textContent = visible.filter((record) => ["Nuevo ingreso", "Pendiente contacto"].includes(record.estado)).length;
+  document.getElementById("metric-enviada").textContent = visible.filter((record) => record.estado === "Encuesta enviada").length;
+  document.getElementById("metric-proceso").textContent = visible.filter((record) => record.estado === "Scoring en proceso").length;
+  document.getElementById("metric-rechazados").textContent = visible.filter((record) => record.resultadoScoring === "No paso").length;
 }
 
 function renderTable() {
   const body = document.getElementById("solicitudes-table-body");
   if (state.loading) {
-    body.innerHTML = '<tr><td colspan="9">Cargando solicitudes...</td></tr>';
+    body.innerHTML = '<tr><td colspan="7">Cargando...</td></tr>';
     return;
   }
 
-  const records = filteredRecords();
+  const records = pendingRecords();
   body.innerHTML = records.map((record) => `
     <tr>
-      <td>${record.sede}</td>
       <td>
         <strong>${record.nombre}</strong>
         <div>${record.dni}</div>
@@ -509,7 +416,6 @@ function renderTable() {
       <td>${record.responsable}</td>
       <td>${record.canalScoring}</td>
       <td>${statusBadge(record.estado)}</td>
-      <td>${resultBadge(record.resultadoScoring)}</td>
       <td>
         <div class="row-actions">
           <button class="whatsapp-button" type="button" onclick="openWhatsApp('${record.id}')">WhatsApp</button>
@@ -518,30 +424,49 @@ function renderTable() {
         </div>
       </td>
     </tr>
-  `).join("") || '<tr><td colspan="9">No hay solicitudes para este filtro.</td></tr>';
+  `).join("") || '<tr><td colspan="7">No hay casos para este filtro.</td></tr>';
+}
+
+function renderRejectedTable() {
+  const body = document.getElementById("rejected-table-body");
+  if (state.loading) {
+    body.innerHTML = '<tr><td colspan="5">Cargando...</td></tr>';
+    return;
+  }
+
+  const records = rejectedRecords();
+  body.innerHTML = records.map((record) => `
+    <tr>
+      <td>
+        <strong>${record.nombre}</strong>
+        <div>${record.dni}</div>
+      </td>
+      <td>${record.nroSolicitud}</td>
+      <td>${record.vendedor}</td>
+      <td>${record.motivoResultado || "-"}</td>
+      <td><button class="action-button" type="button" onclick="openRecord('${record.id}')">Ver caso</button></td>
+    </tr>
+  `).join("") || '<tr><td colspan="5">No hay rechazados.</td></tr>';
 }
 
 function renderQueue() {
   const container = document.getElementById("queue-list");
   if (state.loading) {
-    container.innerHTML = '<article class="queue-card"><h4>Cargando</h4><p>Traemos la base desde Sheets.</p></article>';
+    container.innerHTML = '<article class="queue-card"><p>Cargando...</p></article>';
     return;
   }
 
   container.innerHTML = queueRecords().map((record) => `
     <article class="queue-card ${record.id === state.selectedId ? "active" : ""}" onclick="openRecord('${record.id}')">
       <div class="queue-card-top">
-        <div>
-          <h4>${record.nombre}</h4>
-          <div class="queue-meta">${record.sede} · ${record.nroSolicitud}</div>
-        </div>
+        <strong>${record.nombre}</strong>
         ${statusBadge(record.estado)}
       </div>
-      <p class="queue-meta">${record.canalScoring} · ${record.responsable}</p>
-      <p class="queue-meta"><strong>Proxima:</strong> ${record.proximaAccion}</p>
-      <p class="queue-meta"><strong>Resultado:</strong> ${record.resultadoScoring}</p>
+      <div class="queue-meta">${record.sede} · ${record.nroSolicitud}</div>
+      <div class="queue-meta">${record.canalScoring} · ${record.responsable}</div>
+      <div class="queue-meta">${record.proximaAccion}</div>
     </article>
-  `).join("") || '<article class="queue-card"><h4>Sin casos</h4><p>No hay registros en la cola actual.</p></article>';
+  `).join("") || '<article class="queue-card"><p>Sin casos.</p></article>';
 }
 
 function renderDetail() {
@@ -556,18 +481,20 @@ function renderDetail() {
 
   empty.classList.add("hidden");
   detail.classList.remove("hidden");
+
   document.getElementById("detail-sede").textContent = `${record.sede} · Solicitud ${record.nroSolicitud}`;
   document.getElementById("detail-name").textContent = record.nombre;
-  document.getElementById("detail-plan").textContent = `${record.modelo} · Vendedor ${record.vendedor}`;
+  document.getElementById("detail-plan").textContent = `${record.modelo} · ${record.vendedor}`;
   document.getElementById("detail-status").outerHTML = statusBadge(record.estado).replace("<span", '<span id="detail-status"');
   document.getElementById("detail-result").outerHTML = resultBadge(record.resultadoScoring).replace("<span", '<span id="detail-result"');
   document.getElementById("detail-owner").textContent = `${record.responsable} · ${record.canalScoring}`;
+
   document.getElementById("detail-contact-lines").innerHTML = `
     <div><strong>Telefono:</strong> ${record.telefono || "-"}</div>
     <div><strong>Mail:</strong> ${record.mail || "-"}</div>
     <div><strong>DNI:</strong> ${record.dni || "-"}</div>
     <div><strong>Ultima gestion:</strong> ${record.ultimaGestion || "-"}</div>
-    <div><strong>Observaciones:</strong> ${record.observaciones || "Sin observaciones"}</div>
+    <div><strong>Observaciones:</strong> ${record.observaciones || "-"}</div>
   `;
 
   setSelectValue("detail-responsable", record.responsable || state.catalogs.operadores[0] || "Recepcion");
@@ -597,7 +524,7 @@ function renderDetail() {
       <small>${entry.fecha} · ${entry.tipo}${entry.responsable ? ` · ${entry.responsable}` : ""}</small>
       <p>${entry.detalle}</p>
     </article>
-  `).join("") || '<article class="timeline-item"><p>Sin movimientos registrados.</p></article>';
+  `).join("") || '<article class="timeline-item"><p>Sin movimientos.</p></article>';
 }
 
 function setSelectValue(id, value) {
@@ -614,8 +541,7 @@ function nextStatus(current) {
 function openRecord(id) {
   state.selectedId = id;
   switchView("gestion");
-  renderQueue();
-  renderDetail();
+  renderAll();
 }
 
 async function persistRecord(record, gestion) {
@@ -645,7 +571,7 @@ async function openWhatsApp(id) {
   };
 
   const gestion = buildGestionPayload(record.id, "WhatsApp", "Se preparo el mensaje de WhatsApp con acceso a encuesta.", record.responsable);
-  await runMutation(() => persistRecord(nextRecord, gestion), "WhatsApp listo y gestion guardada.");
+  await runMutation(() => persistRecord(nextRecord, gestion), "WhatsApp registrado.");
 }
 
 async function callClient(id) {
@@ -667,7 +593,7 @@ async function callClient(id) {
   };
 
   const gestion = buildGestionPayload(record.id, "Llamada", "Se disparo una llamada desde la mesa operativa.", record.responsable);
-  await runMutation(() => persistRecord(nextRecord, gestion), "Llamada registrada en la ficha.");
+  await runMutation(() => persistRecord(nextRecord, gestion), "Llamada registrada.");
 }
 
 function calculateScoringFromForm() {
@@ -690,30 +616,26 @@ function calculateScoringFromForm() {
   let result = "Paso";
   let recontacto = respuestas.q10 === "Si" ? "Si" : "No";
 
-  if ([respuestas.q1, respuestas.q2, respuestas.q3, respuestas.q4].includes("No")) {
-    result = "Revisar";
-    issues.push("Informacion comercial no del todo clara");
-  }
-  if (respuestas.q4 === "Difiere") {
-    result = "Revisar";
-    issues.push("Diferencia detectada en cuota 2");
-  }
-  if (respuestas.q7 === "No") {
-    result = "No paso";
-    recontacto = "Si";
-    issues.push("No reconoce correctamente al vendedor");
-  }
-  if (parseInt(respuestas.q8 || "5", 10) <= 2) {
-    result = result === "Paso" ? "Revisar" : result;
-    recontacto = "Si";
-    issues.push("Calificacion baja al vendedor");
-  }
+  if (respuestas.q1 === "No") issues.push("P1: no entendia el plan");
+  if (respuestas.q2 === "No") issues.push("P2: no le explicaron licitacion");
+  if (respuestas.q3 === "No") issues.push("P3: no entendio adjudicacion");
+  if (respuestas.q4 === "No" || respuestas.q4 === "Difiere") issues.push("P4: diferencia en cuota 2");
+  if (respuestas.q7 === "No") issues.push("P7: no reconoce al vendedor");
+  if (parseInt(respuestas.q8 || "5", 10) <= 2) issues.push(`P8: calificacion baja (${respuestas.q8})`);
+  if (respuestas.q10 === "Si") issues.push("P10: requiere recontacto");
+
   if (respuestas.observacionesScoring && /(engano|reclamo|molesto|disconforme|demanda|denuncia)/i.test(respuestas.observacionesScoring)) {
+    issues.push("Obs: comentario sensible del cliente");
+  }
+
+  if (issues.some((item) => item.startsWith("P7")) || issues.some((item) => item.startsWith("Obs"))) {
     result = "No paso";
     recontacto = "Si";
-    issues.push("Observacion sensible del cliente");
+  } else if (issues.length) {
+    result = "Revisar";
   }
-  if (!issues.length) issues.push("Validacion general conforme");
+
+  if (!issues.length) issues.push("Sin objeciones");
 
   const reason = issues.join(" | ");
   document.getElementById("result-display").value = result;
@@ -736,12 +658,12 @@ async function saveScoring(event) {
     motivoResultado: scoring.reason,
     requiereRecontacto: scoring.recontacto,
     estado: scoring.result === "Paso" ? "Cerrado" : "Scoring en proceso",
-    proximaAccion: scoring.result === "Paso" ? "Caso cerrado" : "Cerrar scoring",
+    proximaAccion: scoring.result === "Paso" ? "Caso cerrado" : "Revisar scoring",
     ultimaGestion: today(),
   };
 
-  const gestion = buildGestionPayload(record.id, "Scoring", `Se guardo scoring con resultado ${scoring.result}. Motivo: ${scoring.reason}.`, record.responsable);
-  await runMutation(() => persistRecord(nextRecord, gestion), "Scoring guardado en Sheets.");
+  const gestion = buildGestionPayload(record.id, "Scoring", `Se guardo scoring con resultado ${scoring.result}. ${scoring.reason}.`, record.responsable);
+  await runMutation(() => persistRecord(nextRecord, gestion), "Scoring guardado.");
 }
 
 async function saveOperationalChanges() {
@@ -758,8 +680,8 @@ async function saveOperationalChanges() {
     ultimaGestion: today(),
   };
 
-  const gestion = buildGestionPayload(record.id, "Operacion", `Se actualizaron datos operativos. Estado: ${updates.estado}. Proxima accion: ${updates.proximaAccion}.`, updates.responsable);
-  await runMutation(() => persistRecord(updates, gestion), "Cambios operativos guardados.");
+  const gestion = buildGestionPayload(record.id, "Operacion", `Operacion actualizada. Estado: ${updates.estado}. Proxima: ${updates.proximaAccion}.`, updates.responsable);
+  await runMutation(() => persistRecord(updates, gestion), "Operacion guardada.");
 }
 
 async function advanceSelectedStatus() {
@@ -770,10 +692,10 @@ async function advanceSelectedStatus() {
     ...record,
     estado: next,
     ultimaGestion: today(),
-    proximaAccion: next === "Cerrado" ? "Caso cerrado" : "Continuar gestion",
+    proximaAccion: next === "Cerrado" ? "Caso cerrado" : "Continuar",
   };
 
-  const gestion = buildGestionPayload(record.id, "Estado", `El caso avanzo a ${next}.`, record.responsable);
+  const gestion = buildGestionPayload(record.id, "Estado", `Avanzo a ${next}.`, record.responsable);
   await runMutation(() => persistRecord(nextRecord, gestion), "Estado actualizado.");
 }
 
@@ -788,7 +710,7 @@ async function addTimelineNote() {
 
   const nextRecord = { ...record, ultimaGestion: today() };
   const gestion = buildGestionPayload(record.id, "Seguimiento", note, record.responsable);
-  await runMutation(() => persistRecord(nextRecord, gestion), "Movimiento agregado al historial.");
+  await runMutation(() => persistRecord(nextRecord, gestion), "Nota agregada.");
   textarea.value = "";
 }
 
@@ -810,28 +732,17 @@ function openSurvey() {
 }
 
 function exportCsv() {
-  const headers = [
-    "SEDE", "FECHA", "NOMBRE", "DNI", "TELEFONO", "MAIL", "PLAN", "TIPO_PAGO", "NRO_SOLICITUD", "NRO_CLIENTE", "VENDEDOR", "RESPONSABLE", "CANAL", "ESTADO", "PROXIMA_ACCION", "RESULTADO_SCORING", "MOTIVO_RESULTADO", "OBSERVACIONES"
-  ];
-  const rows = filteredRecords().map((record) => [
-    record.sede,
-    record.fecha,
+  const headers = ["NOMBRE", "DNI", "SOLICITUD", "VENDEDOR", "RESPONSABLE", "CANAL", "ESTADO", "RESULTADO", "MOTIVO"];
+  const rows = allVisibleRecords().map((record) => [
     record.nombre,
     record.dni,
-    record.telefono,
-    record.mail,
-    record.modelo,
-    record.tipoPago,
     record.nroSolicitud,
-    record.nroCliente,
     record.vendedor,
     record.responsable,
     record.canalScoring,
     record.estado,
-    record.proximaAccion,
     record.resultadoScoring,
     record.motivoResultado,
-    record.observaciones,
   ]);
 
   const csv = [headers, ...rows]
@@ -892,12 +803,12 @@ async function createRecord(event) {
     creadoEn: new Date().toISOString(),
   };
 
-  const gestion = buildGestionPayload(record.id, "Carga", "Se dio de alta la solicitud desde la pantalla de recepcion.", record.responsable);
+  const gestion = buildGestionPayload(record.id, "Carga", "Se dio de alta la solicitud.", record.responsable);
 
   await runMutation(async () => {
     await apiPostRecords({ action: "createRecord", record: uiRecordToApiRecord(record) });
     await apiPostRecords({ action: "appendGestion", gestion });
-  }, "Solicitud creada en Sheets.");
+  }, "Solicitud creada.");
 
   form.reset();
   form.sede.value = "Jujuy";
@@ -933,24 +844,17 @@ function fillDemo() {
   form.vendedor.value = "MARIANO PEREZ";
   form.proximaAccion.value = "Enviar encuesta";
   form.estado.value = "Pendiente contacto";
-  form.observaciones.value = "Cliente con interes en entrega temprana y consulta por bonificacion de patentamiento.";
+  form.observaciones.value = "Cliente con interes en entrega temprana.";
 }
 
 function switchView(view) {
   state.currentView = view;
-  document.querySelectorAll(".nav-item").forEach((button) => {
+  document.querySelectorAll(".nav-tab").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === view);
   });
   document.querySelectorAll(".view").forEach((section) => {
     section.classList.toggle("active", section.id === `view-${view}`);
   });
-
-  document.getElementById("view-title").textContent = {
-    dashboard: "Resumen operativo",
-    carga: "Nueva solicitud",
-    solicitudes: "Bandeja operativa",
-    gestion: "Gestionar caso",
-  }[view];
 }
 
 function renderBoardSegments() {
@@ -960,10 +864,10 @@ function renderBoardSegments() {
 }
 
 function renderAll() {
-  renderDashboard();
+  renderMetrics();
   renderBoardSegments();
-  renderBoardSummary();
   renderTable();
+  renderRejectedTable();
   renderQueue();
   renderDetail();
 }
@@ -972,26 +876,22 @@ function jumpToBoardFilter(filter) {
   state.boardFilter = filter;
   state.statusFilter = "Todas";
   document.getElementById("status-filter").value = "Todas";
-  switchView("solicitudes");
+  switchView("pendientes");
   renderAll();
 }
 
 function openNextPending() {
   const nextRecord = findNextPendingRecord();
   if (!nextRecord) {
-    notify("No hay casos pendientes con los filtros actuales.");
+    notify("No hay casos pendientes.");
     return;
   }
   openRecord(nextRecord.id);
 }
 
 function bindEvents() {
-  document.querySelectorAll(".nav-item").forEach((button) => {
+  document.querySelectorAll(".nav-tab").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
-  });
-
-  document.querySelectorAll("[data-quick-nav]").forEach((button) => {
-    button.addEventListener("click", () => switchView(button.dataset.quickNav));
   });
 
   document.querySelectorAll("[data-board-filter]").forEach((button) => {
@@ -1040,9 +940,8 @@ function bindEvents() {
   document.getElementById("export-button").addEventListener("click", exportCsv);
   document.getElementById("refresh-button").addEventListener("click", () => refreshData().catch((error) => notify(error.message || error)));
   document.getElementById("take-next-button").addEventListener("click", openNextPending);
-  document.getElementById("open-pending-button").addEventListener("click", () => jumpToBoardFilter("Pendiente contacto"));
-  document.getElementById("open-survey-sent-button").addEventListener("click", () => jumpToBoardFilter("Encuesta enviada"));
-  document.getElementById("open-review-button").addEventListener("click", () => jumpToBoardFilter("Scoring en proceso"));
+  document.getElementById("open-contact-button").addEventListener("click", () => jumpToBoardFilter("Pendiente contacto"));
+  document.getElementById("open-sent-button").addEventListener("click", () => jumpToBoardFilter("Encuesta enviada"));
 }
 
 async function initApp() {
@@ -1055,7 +954,7 @@ async function initApp() {
     state.loading = false;
     renderAll();
     console.error(error);
-    notify(`No pude conectar la app con Sheets. Revisemos APPS_SCRIPT_URL, BACKEND_SECRET y el deploy del Apps Script. Detalle: ${error.message || error}`);
+    notify(`No pude conectar la app con Sheets. ${error.message || error}`);
   }
 }
 
