@@ -1,0 +1,363 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Autosol Scoring Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Cormorant+Garamond:wght@600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">A</div>
+          <div>
+            <p class="eyebrow">Autosol interno</p>
+            <h1>Scoring Center</h1>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-item active" data-view="dashboard">Panel</button>
+          <button class="nav-item" data-view="carga">Nueva solicitud</button>
+          <button class="nav-item" data-view="solicitudes">Base de solicitudes</button>
+          <button class="nav-item" data-view="gestion">Mesa de scoring</button>
+        </nav>
+
+        <div class="sidebar-card">
+          <p class="eyebrow">Como deberia funcionar</p>
+          <ul>
+            <li>Recepcion carga la solicitud.</li>
+            <li>El caso queda visible para cualquier operador.</li>
+            <li>Se puede contactar por WhatsApp o llamada.</li>
+            <li>El scoring se guarda en la misma ficha.</li>
+          </ul>
+        </div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Operacion diaria</p>
+            <h2 id="view-title">Panel operativo</h2>
+          </div>
+          <div class="topbar-actions">
+            <label class="inline-field">
+              <span>Sede</span>
+              <select id="global-sede-filter">
+                <option value="Todas">Todas</option>
+                <option value="Jujuy">Jujuy</option>
+                <option value="Salta">Salta</option>
+              </select>
+            </label>
+            <label class="inline-field wide">
+              <span>Responsable</span>
+              <select id="global-operator-filter">
+                <option value="Todos">Todos</option>
+                <option value="Recepcion">Recepcion</option>
+                <option value="Contact Center 1">Contact Center 1</option>
+                <option value="Contact Center 2">Contact Center 2</option>
+                <option value="Supervisor">Supervisor</option>
+              </select>
+            </label>
+            <button class="ghost-button" id="export-button" type="button">Exportar CSV</button>
+          </div>
+        </header>
+
+        <section id="view-dashboard" class="view active">
+          <div class="hero-card">
+            <div>
+              <p class="eyebrow">Mesa unificada</p>
+              <h3>Recepcion, seguimiento y scoring en una sola pantalla</h3>
+              <p class="hero-copy">La idea operativa es clara: un usuario puede cargar la solicitud y otro puede continuarla despues, enviar el mensaje, llamar, tomar respuestas y cerrar el scoring sin perder historial.</p>
+            </div>
+            <div class="hero-actions">
+              <button class="primary-button" type="button" data-quick-nav="carga">Cargar nueva solicitud</button>
+              <button class="ghost-button" type="button" data-quick-nav="gestion">Ir a la mesa de scoring</button>
+            </div>
+          </div>
+
+          <div class="stat-grid" id="stat-grid"></div>
+
+          <div class="dashboard-grid">
+            <article class="panel-card">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Prioridades de hoy</p>
+                  <h3>Casos a mover</h3>
+                </div>
+              </div>
+              <div id="priority-list" class="stack-list"></div>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Actividad reciente</p>
+                  <h3>Ultimos movimientos</h3>
+                </div>
+              </div>
+              <div id="recent-list" class="stack-list"></div>
+            </article>
+          </div>
+
+          <article class="panel-card panel-spaced">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Vista rapida</p>
+                <h3>Pipeline operativo</h3>
+              </div>
+            </div>
+            <div id="pipeline-strip" class="pipeline-strip"></div>
+          </article>
+        </section>
+
+        <section id="view-carga" class="view">
+          <article class="panel-card">
+            <div class="panel-header compact">
+              <div>
+                <p class="eyebrow">Ingreso manual</p>
+                <h3>Nueva solicitud</h3>
+              </div>
+              <p class="helper-copy">Pensado para recepcion. Se carga una vez y despues el caso ya queda disponible para contacto, scoring y seguimiento.</p>
+            </div>
+
+            <form id="solicitud-form" class="form-layout">
+              <div class="form-section">
+                <h4>Cabecera</h4>
+                <div class="field-grid cols-4">
+                  <label><span>Sede</span><select name="sede" required><option value="Jujuy">Jujuy</option><option value="Salta">Salta</option></select></label>
+                  <label><span>Fecha de ingreso</span><input name="fecha" type="date" required /></label>
+                  <label><span>Fecha de venta</span><input name="fechaVenta" type="date" /></label>
+                  <label><span>Responsable inicial</span><select name="responsable"><option value="Recepcion">Recepcion</option><option value="Contact Center 1">Contact Center 1</option><option value="Contact Center 2">Contact Center 2</option></select></label>
+                </div>
+              </div>
+
+              <div class="form-section">
+                <h4>Datos del cliente</h4>
+                <div class="field-grid cols-4">
+                  <label class="span-2"><span>Nombre y apellido</span><input name="nombre" type="text" required /></label>
+                  <label><span>DNI</span><input name="dni" type="text" inputmode="numeric" required /></label>
+                  <label><span>Fecha de nacimiento</span><input name="fechaNacimiento" type="date" /></label>
+                  <label class="span-2"><span>Domicilio</span><input name="domicilio" type="text" /></label>
+                  <label><span>Telefono</span><input name="telefono" type="text" inputmode="tel" required /></label>
+                  <label><span>Mail</span><input name="mail" type="email" /></label>
+                  <label><span>Canal sugerido</span><select name="canalScoring"><option value="WhatsApp">WhatsApp</option><option value="Llamada">Llamada</option><option value="Hibrido">Hibrido</option></select></label>
+                </div>
+              </div>
+
+              <div class="form-section">
+                <h4>Plan y venta</h4>
+                <div class="field-grid cols-4">
+                  <label class="span-2"><span>Modelo suscripto / plan</span><input name="modelo" type="text" required /></label>
+                  <label><span>Tipo de pago</span><input name="tipoPago" type="text" /></label>
+                  <label><span>Nro de solicitud</span><input name="nroSolicitud" type="text" required /></label>
+                  <label><span>Nro de cliente</span><input name="nroCliente" type="text" /></label>
+                  <label><span>1ra cuota</span><input name="primeraCuota" type="text" /></label>
+                  <label><span>Importe cobrado 1ra</span><input name="importePrimera" type="text" /></label>
+                  <label><span>Saldo 1ra cuota</span><input name="saldoPrimera" type="text" /></label>
+                  <label><span>Cuota 2</span><input name="cuotaDos" type="text" /></label>
+                  <label class="span-2"><span>Nombre del vendedor</span><input name="vendedor" type="text" required /></label>
+                  <label><span>Proxima accion</span><select name="proximaAccion"><option value="Preparar contacto">Preparar contacto</option><option value="Enviar encuesta">Enviar encuesta</option><option value="Llamar hoy">Llamar hoy</option></select></label>
+                  <label><span>Estado inicial</span><select name="estado"><option value="Nuevo ingreso">Nuevo ingreso</option><option value="Pendiente contacto">Pendiente contacto</option></select></label>
+                </div>
+              </div>
+
+              <div class="form-section">
+                <h4>Origen y observaciones</h4>
+                <div class="field-grid cols-4 checks-grid">
+                  <label><span>SIAC</span><input name="siac" type="checkbox" checked /></label>
+                  <label><span>TMK</span><input name="tmk" type="checkbox" checked /></label>
+                  <label><span>Salesforce</span><input name="salesforce" type="checkbox" checked /></label>
+                  <label><span>Finalizadas</span><input name="finalizadas" type="checkbox" checked /></label>
+                </div>
+                <div class="field-grid cols-1 top-gap">
+                  <label><span>Observaciones / beneficio</span><textarea name="observaciones" rows="4"></textarea></label>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="button" class="ghost-button" id="fill-demo-button">Cargar ejemplo</button>
+                <button type="submit" class="primary-button">Guardar solicitud</button>
+              </div>
+            </form>
+          </article>
+        </section>
+
+        <section id="view-solicitudes" class="view">
+          <article class="panel-card">
+            <div class="panel-header compact">
+              <div>
+                <p class="eyebrow">Base operativa</p>
+                <h3>Solicitudes</h3>
+              </div>
+              <div class="toolbar">
+                <input id="search-input" type="search" placeholder="Buscar por nombre, DNI, solicitud o vendedor" />
+                <select id="status-filter">
+                  <option value="Todas">Todos los estados</option>
+                  <option value="Nuevo ingreso">Nuevo ingreso</option>
+                  <option value="Pendiente contacto">Pendiente contacto</option>
+                  <option value="Encuesta enviada">Encuesta enviada</option>
+                  <option value="Llamada programada">Llamada programada</option>
+                  <option value="Scoring en proceso">Scoring en proceso</option>
+                  <option value="Cerrado">Cerrado</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sede</th>
+                    <th>Cliente</th>
+                    <th>Plan</th>
+                    <th>Vendedor</th>
+                    <th>Canal</th>
+                    <th>Estado</th>
+                    <th>Resultado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="solicitudes-table-body"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section id="view-gestion" class="view">
+          <div class="workspace-grid">
+            <article class="panel-card queue-panel">
+              <div class="panel-header compact">
+                <div>
+                  <p class="eyebrow">Cola de trabajo</p>
+                  <h3>Casos activos</h3>
+                </div>
+                <select id="queue-filter">
+                  <option value="Activos">Solo activos</option>
+                  <option value="Todos">Todos</option>
+                  <option value="WhatsApp">Solo WhatsApp</option>
+                  <option value="Llamada">Solo llamada</option>
+                  <option value="Hibrido">Solo hibrido</option>
+                </select>
+              </div>
+              <div id="queue-list" class="queue-list"></div>
+            </article>
+
+            <article class="panel-card detail-panel">
+              <div id="empty-detail" class="empty-detail">
+                <p class="eyebrow">Mesa de scoring</p>
+                <h3>Selecciona un cliente para gestionar el caso</h3>
+                <p>Desde aqui la misma persona o otra puede mandar el mensaje, llamar, registrar respuestas y cerrar el scoring.</p>
+              </div>
+
+              <div id="detail-content" class="detail-content hidden">
+                <div class="detail-head">
+                  <div>
+                    <p class="eyebrow" id="detail-sede"></p>
+                    <h3 id="detail-name"></h3>
+                    <p class="detail-subline" id="detail-plan"></p>
+                  </div>
+                  <div class="detail-head-actions">
+                    <button class="ghost-button" type="button" id="copy-link-button">Copiar link</button>
+                    <button class="primary-button" type="button" id="open-survey-button">Abrir encuesta</button>
+                  </div>
+                </div>
+
+                <div class="badge-row">
+                  <span id="detail-status" class="status-chip"></span>
+                  <span id="detail-result" class="status-chip neutral-chip"></span>
+                  <span id="detail-owner" class="neutral-chip"></span>
+                </div>
+
+                <div class="detail-grid">
+                  <section class="mini-card">
+                    <h4>Contacto</h4>
+                    <div class="mini-lines" id="detail-contact-lines"></div>
+                    <div class="action-row">
+                      <button class="whatsapp-button" type="button" id="send-whatsapp-button">Enviar WhatsApp</button>
+                      <button class="call-button" type="button" id="call-button">Llamar</button>
+                    </div>
+                  </section>
+
+                  <section class="mini-card">
+                    <h4>Operacion</h4>
+                    <div class="field-grid cols-2 compact-grid">
+                      <label><span>Responsable</span><select id="detail-responsable"><option value="Recepcion">Recepcion</option><option value="Contact Center 1">Contact Center 1</option><option value="Contact Center 2">Contact Center 2</option><option value="Supervisor">Supervisor</option></select></label>
+                      <label><span>Canal</span><select id="detail-canal"><option value="WhatsApp">WhatsApp</option><option value="Llamada">Llamada</option><option value="Hibrido">Hibrido</option></select></label>
+                      <label><span>Estado</span><select id="detail-estado"><option value="Nuevo ingreso">Nuevo ingreso</option><option value="Pendiente contacto">Pendiente contacto</option><option value="Encuesta enviada">Encuesta enviada</option><option value="Llamada programada">Llamada programada</option><option value="Scoring en proceso">Scoring en proceso</option><option value="Cerrado">Cerrado</option></select></label>
+                      <label><span>Proxima accion</span><select id="detail-proxima"><option value="Preparar contacto">Preparar contacto</option><option value="Enviar encuesta">Enviar encuesta</option><option value="Llamar hoy">Llamar hoy</option><option value="Esperar respuesta">Esperar respuesta</option><option value="Cerrar scoring">Cerrar scoring</option></select></label>
+                    </div>
+                    <div class="action-row top-gap">
+                      <button class="ghost-button" type="button" id="save-ops-button">Guardar operacion</button>
+                      <button class="action-button" type="button" id="advance-status-button">Avanzar estado</button>
+                    </div>
+                  </section>
+                </div>
+
+                <section class="panel-subsection">
+                  <div class="subsection-head">
+                    <div>
+                      <p class="eyebrow">Scoring</p>
+                      <h4>Formulario de gestion</h4>
+                    </div>
+                    <p class="helper-copy small">Se puede completar por llamada o despues de que el cliente responda por WhatsApp. El sistema deja motivo y observaciones.</p>
+                  </div>
+
+                  <form id="scoring-form" class="scoring-form">
+                    <div class="questions-grid">
+                      <label><span>1. Entendia el plan?</span><select name="q1"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Dudas">Dudas</option></select></label>
+                      <label><span>2. Le explicaron licitacion?</span><select name="q2"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Parcial">Parcial</option></select></label>
+                      <label><span>3. Entendio adjudicacion asegurada?</span><select name="q3"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="No recuerda">No recuerda</option></select></label>
+                      <label><span>4. Le informaron bien cuota 2?</span><select name="q4"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Difiere">Difiere</option></select></label>
+                      <label><span>5. Pago primera cuota?</span><select name="q5"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Pendiente">Pendiente</option></select></label>
+                      <label><span>6. Medio de pago confirmado</span><input name="q6" type="text" placeholder="Ej: Debito automatico / transferencia" /></label>
+                      <label><span>7. Reconoce al vendedor correcto?</span><select name="q7"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Mas o menos">Mas o menos</option></select></label>
+                      <label><span>8. Puntaje al vendedor</span><select name="q8"><option value="">Seleccionar</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label>
+                      <label><span>9. Hubo beneficio prometido?</span><select name="q9"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="No aplica">No aplica</option></select></label>
+                      <label><span>10. Requiere recontacto?</span><select name="q10"><option value="">Seleccionar</option><option value="No">No</option><option value="Si">Si</option></select></label>
+                    </div>
+
+                    <div class="field-grid cols-1 top-gap">
+                      <label><span>Observaciones del scoring / puntos a revisar</span><textarea name="observacionesScoring" rows="4" placeholder="Deja aca los detalles, objeciones o aclaraciones del cliente."></textarea></label>
+                    </div>
+
+                    <div class="field-grid cols-3 top-gap">
+                      <label><span>Resultado</span><input id="result-display" type="text" readonly /></label>
+                      <label><span>Motivo principal</span><input id="reason-display" type="text" readonly /></label>
+                      <label><span>Recontacto</span><input id="recontact-display" type="text" readonly /></label>
+                    </div>
+
+                    <div class="form-actions top-gap">
+                      <button type="button" class="ghost-button" id="calculate-button">Calcular scoring</button>
+                      <button type="submit" class="primary-button">Guardar scoring</button>
+                    </div>
+                  </form>
+                </section>
+
+                <section class="panel-subsection timeline-section">
+                  <div class="subsection-head">
+                    <div>
+                      <p class="eyebrow">Seguimiento</p>
+                      <h4>Bitacora del caso</h4>
+                    </div>
+                  </div>
+                  <div class="timeline-form">
+                    <textarea id="timeline-note" rows="3" placeholder="Escribir una gestion, acuerdo, respuesta del cliente o detalle del llamado."></textarea>
+                    <button class="ghost-button" type="button" id="add-note-button">Agregar movimiento</button>
+                  </div>
+                  <div id="timeline-list" class="timeline-list"></div>
+                </section>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
