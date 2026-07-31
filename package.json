@@ -3,8 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "npx serve .",
-    "build": "echo Static build ready",
-    "start": "npx serve ."
+    "build:client": "node scripts/build-client.mjs",
+    "check": "node --check app.js && node --check netlify/functions/records.mjs && node --check netlify/functions/catalogs.mjs && node --check netlify/functions/survey-results.mjs && node scripts/check-apps-script.mjs && npm run build:client && node scripts/security-smoke.mjs",
+    "dev": "npm run build:client && npx serve .",
+    "build": "npm run build:client && echo Static build ready",
+    "start": "npm run dev"
+  },
+  "dependencies": {
+    "@netlify/identity": "^1.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
   }
 }

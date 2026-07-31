@@ -1,9 +1,19 @@
-const API_ENDPOINTS = {
+﻿const API_ENDPOINTS = {
   records: "/.netlify/functions/records",
   catalogs: "/.netlify/functions/catalogs",
+  surveyResults: "/.netlify/functions/survey-results",
 };
 
-const SURVEY_BASE_URL = "https://plan-encuesta.netlify.app/?t=";
+const PANEL_ROLES = ["scoring_operator", "scoring_supervisor", "scoring_admin"];
+const SUPERVISOR_ROLES = ["scoring_supervisor", "scoring_admin"];
+const IMPORTED_SIGNAL_LABELS = {
+  PLAN_NO_ENTENDIDO: "Plan no entendido",
+  LICITACION_NO_EXPLICADA: "Licitacion no explicada",
+  ADJUDICACION_NO_ENTENDIDA: "Adjudicacion no entendida",
+  CUOTA_DIFERENTE: "Diferencia en cuota",
+  REQUIERE_RECONTACTO: "Recontacto solicitado",
+  SENSITIVE_COMMENT: "Comentario sensible",
+};
 const STATUS_FLOW = [
   "Nuevo ingreso",
   "Pendiente contacto",
@@ -24,6 +34,7 @@ const STATUS_INFO = {
 
 const DEFAULT_OPERATORS = ["Recepcion", "Contact Center 1", "Contact Center 2", "Supervisor"];
 const DEFAULT_CHANNELS = ["WhatsApp", "Llamada", "Hibrido"];
+const MANUAL_STEPS_TOTAL = 12;
 
 const state = {
   records: [],
@@ -36,22 +47,26 @@ const state = {
   queueFilter: "Activos",
   selectedId: null,
   callModeRecordId: null,
+  currentStep: 0,
   catalogs: {
     operadores: [...DEFAULT_OPERATORS],
     canales: [...DEFAULT_CHANNELS],
   },
+  auth: {
+    initialized: false,
+    recovery: false,
+    user: null,
+  },
+  eventsBound: false,
+  importedSurveys: [],
+  surveyImportMessage: "",
+  surveyImportTruncated: false,
   loading: true,
 };
 
 function uid() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function buildSurveyLink(nroSolicitud, nombre) {
-  const clean = String(nroSolicitud || "SOL").replace(/\W/g, "").slice(-8) || "SOL00001";
-  const seed = String(nombre || "CLIENTE").replace(/\W/g, "").toUpperCase().slice(0, 4) || "AUTO";
-  return `${SURVEY_BASE_URL}${seed}${clean}`;
 }
 
 function normalizePhone(value) {
@@ -123,16 +138,52 @@ function notify(message) {
   window.alert(message);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  }[character]));
+}
+
+function getAuthRoles(user = state.auth.user) {
+  return Array.isArray(user?.roles) ? user.roles.filter((role) => typeof role === "string") : [];
+}
+
+function hasPanelAccess(user = state.auth.user) {
+  return getAuthRoles(user).some((role) => PANEL_ROLES.includes(role));
+}
+
+function isSupervisor(user = state.auth.user) {
+  return getAuthRoles(user).some((role) => SUPERVISOR_ROLES.includes(role));
+}
+
+function requireAuthenticatedSession() {
+  if (!state.auth.user || !hasPanelAccess()) throw new Error("Inicia sesion con una cuenta autorizada.");
+}
+
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
+  requireAuthenticatedSession();
+  const response = await fetch(url, {
+    ...options,
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: {
+      ...(options.headers || {}),
+    },
+  });
   const text = await response.text();
   let data = {};
   try {
     data = text ? JSON.parse(text) : {};
   } catch (error) {
-    throw new Error(text || "Respuesta invalida del servidor.");
+    throw new Error("Respuesta invalida del servidor.");
   }
   if (!response.ok || data.status === "ERROR") {
+    if (response.status === 401) throw new Error("Tu sesion vencio. Volve a ingresar.");
+    if (response.status === 403) throw new Error("Tu cuenta no tiene permisos para esta operacion.");
     throw new Error(data.message || `Error ${response.status}`);
   }
   return data;
@@ -154,13 +205,17 @@ async function apiPostRecords(payload) {
   });
 }
 
+async function apiListSurveyResults() {
+  return fetchJson(API_ENDPOINTS.surveyResults);
+}
+
 function apiGestionToUi(gestion) {
   return {
-    id: normalizeText(gestion.ID_GESTION) || uid(),
-    fecha: normalizeText(gestion.FECHA),
-    tipo: normalizeText(gestion.TIPO),
-    detalle: normalizeText(gestion.DETALLE),
-    responsable: normalizeText(gestion.RESPONSABLE),
+    id: escapeHtml(normalizeText(gestion.ID_GESTION) || uid()),
+    fecha: escapeHtml(normalizeText(gestion.FECHA)),
+    tipo: escapeHtml(normalizeText(gestion.TIPO)),
+    detalle: escapeHtml(normalizeText(gestion.DETALLE)),
+    responsable: escapeHtml(normalizeText(gestion.RESPONSABLE)),
   };
 }
 
@@ -173,6 +228,70 @@ function parseResponses(raw) {
   } catch (error) {
     return {};
   }
+}
+
+function normalizeImportedSurvey(response) {
+  const result = normalizeText(response?.result);
+  const signals = Array.isArray(response?.signals)
+    ? Array.from(new Set(response.signals.filter((signal) => Object.prototype.hasOwnProperty.call(IMPORTED_SIGNAL_LABELS, signal))))
+    : [];
+  const eventId = normalizeText(response?.eventId);
+  const caseId = normalizeText(response?.caseId);
+  if (!caseId || !/^[a-f0-9]{64}$/i.test(eventId) || !["Paso", "Revisar", "No paso"].includes(result)) return null;
+  return {
+    caseId,
+    eventId,
+    submittedAt: normalizeText(response?.submittedAt).slice(0, 64),
+    result,
+    requiresRecontact: response?.requiresRecontact === true,
+    signals,
+  };
+}
+
+function replaceImportedSurveys(data) {
+  const dedupe = new Set();
+  state.importedSurveys = (Array.isArray(data?.responses) ? data.responses : [])
+    .map(normalizeImportedSurvey)
+    .filter((response) => response && !dedupe.has(response.eventId) && dedupe.add(response.eventId))
+    .sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
+  state.surveyImportTruncated = data?.meta?.truncated === true;
+}
+
+function getImportedSurvey(record) {
+  return state.importedSurveys.find((response) => response.caseId === record.id) || null;
+}
+
+function hasManualSurveyResponses(record) {
+  const respuestas = record.respuestas || {};
+  return Object.keys(respuestas).some((key) => normalizeText(respuestas[key]));
+}
+
+function hasSurveyResponses(record) {
+  return hasManualSurveyResponses(record) || Boolean(getImportedSurvey(record));
+}
+
+function getEffectiveScoringResult(record) {
+  const manualResult = normalizeText(record.resultadoScoring);
+  if (["Paso", "Revisar", "No paso"].includes(manualResult)) return manualResult;
+  return getImportedSurvey(record)?.result || manualResult || "Sin scoring";
+}
+
+function requiresRecontact(record) {
+  return record.requiereRecontacto === "Si" || record.respuestas?.q10 === "Si" || getImportedSurvey(record)?.requiresRecontact === true;
+}
+
+function importedSurveySummary(response) {
+  if (!response) return "Sin detalle";
+  const labels = response.signals.map((signal) => IMPORTED_SIGNAL_LABELS[signal]).filter(Boolean);
+  return labels.length ? `Encuesta vinculada: ${labels.join(", ")}` : "Encuesta vinculada sin alertas";
+}
+
+function getSurveySummary(record) {
+  const respuestas = record.respuestas || {};
+  if (normalizeText(respuestas.q4)) return `P4: ${respuestas.q4}`;
+  if (normalizeText(respuestas.q1)) return `P1: ${respuestas.q1}`;
+  if (normalizeText(respuestas.q7)) return `P7: ${respuestas.q7}`;
+  return importedSurveySummary(getImportedSurvey(record));
 }
 
 function apiRecordToUiRecord(record, gestiones) {
@@ -209,7 +328,7 @@ function apiRecordToUiRecord(record, gestiones) {
     motivoResultado: normalizeText(record.MOTIVO_RESULTADO) || "Pendiente de gestion",
     requiereRecontacto: normalizeText(record.REQUIERE_RECONTACTO) || "No definido",
     ultimaGestion: normalizeDateInput(record.ULTIMA_GESTION) || normalizeText(record.ULTIMA_GESTION),
-    encuestaLink: normalizeText(record.ENCUESTA_LINK) || buildSurveyLink(record.NRO_SOLICITUD, record.NOMBRE),
+    encuestaLink: "",
     respuestas: parseResponses(record.RESPUESTAS_JSON),
     gestiones: gestiones.map(apiGestionToUi).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))),
     creadoEn: normalizeText(record.CREADO_EN),
@@ -250,7 +369,6 @@ function uiRecordToApiRecord(record) {
     MOTIVO_RESULTADO: record.motivoResultado,
     REQUIERE_RECONTACTO: record.requiereRecontacto,
     ULTIMA_GESTION: record.ultimaGestion,
-    ENCUESTA_LINK: record.encuestaLink,
     RESPUESTAS_JSON: JSON.stringify(record.respuestas || {}),
     CREADO_EN: record.creadoEn,
   };
@@ -295,7 +413,7 @@ function syncSelectOptions(id, options, selectedValue) {
   if (!select) return;
   const finalOptions = Array.from(new Set(options.filter(Boolean)));
   const current = selectedValue || select.value;
-  select.innerHTML = finalOptions.map((option) => `<option value="${option}">${option}</option>`).join("");
+  select.innerHTML = finalOptions.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("");
   if (finalOptions.includes(current)) {
     select.value = current;
   } else if (finalOptions.length) {
@@ -319,13 +437,13 @@ function applyCatalogs(catalogs) {
 
   const formResponsable = getFormField("responsable");
   if (formResponsable) {
-    formResponsable.innerHTML = state.catalogs.operadores.map((option) => `<option value="${option}">${option}</option>`).join("");
+    formResponsable.innerHTML = state.catalogs.operadores.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("");
     formResponsable.value = state.catalogs.operadores[0];
   }
 
   const formCanal = getFormField("canalScoring");
   if (formCanal) {
-    formCanal.innerHTML = state.catalogs.canales.map((option) => `<option value="${option}">${option}</option>`).join("");
+    formCanal.innerHTML = state.catalogs.canales.map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("");
     formCanal.value = state.catalogs.canales[0];
   }
 }
@@ -333,18 +451,34 @@ function applyCatalogs(catalogs) {
 async function refreshData() {
   state.loading = true;
   renderAll();
-  const [recordsData, catalogsData] = await Promise.all([
+  const [recordsData, catalogsData, surveyData] = await Promise.all([
     apiListRecords(),
     apiGetCatalogs().catch(() => ({ status: "OK", operadores: [...DEFAULT_OPERATORS], canales: [...DEFAULT_CHANNELS] })),
+    isSupervisor() ? apiListSurveyResults().catch(() => null) : Promise.resolve(null),
   ]);
   replaceStateFromApi(recordsData.records, recordsData.gestiones);
   applyCatalogs(catalogsData);
+  if (surveyData) {
+    replaceImportedSurveys(surveyData);
+    state.surveyImportMessage = state.importedSurveys.length
+      ? `${state.importedSurveys.length} encuestas vinculadas de solo lectura.`
+      : "No hay encuestas vinculadas para los casos visibles.";
+  } else if (isSupervisor()) {
+    state.importedSurveys = [];
+    state.surveyImportTruncated = false;
+    state.surveyImportMessage = "No fue posible actualizar las encuestas vinculadas ahora.";
+  } else {
+    state.importedSurveys = [];
+    state.surveyImportTruncated = false;
+    state.surveyImportMessage = "Las respuestas vinculadas requieren rol de supervisor.";
+  }
   state.loading = false;
   renderAll();
 }
 
 async function runMutation(task, successMessage) {
   try {
+    requireAuthenticatedSession();
     await task();
     await refreshData();
     if (successMessage) notify(successMessage);
@@ -359,7 +493,7 @@ function allVisibleRecords() {
     const bySede = state.sedeFilter === "Todas" || record.sede === state.sedeFilter;
     const byOperator = state.operatorFilter === "Todos" || record.responsable === state.operatorFilter;
     const query = state.search.trim().toLowerCase();
-    const haystack = `${record.nombre} ${record.dni} ${record.nroSolicitud} ${record.vendedor} ${record.modelo}`.toLowerCase();
+    const haystack = `${record.nombre} ${record.nroSolicitud} ${record.vendedor} ${record.modelo}`.toLowerCase();
     const bySearch = !query || haystack.includes(query);
     return bySede && byOperator && bySearch;
   });
@@ -374,15 +508,19 @@ function filteredRecords() {
 }
 
 function pendingRecords() {
-  return filteredRecords().filter((record) => record.resultadoScoring !== "No paso");
+  return filteredRecords().filter((record) => getEffectiveScoringResult(record) !== "No paso");
 }
 
 function rejectedRecords() {
-  return allVisibleRecords().filter((record) => record.resultadoScoring === "No paso");
+  return allVisibleRecords().filter((record) => getEffectiveScoringResult(record) === "No paso");
+}
+
+function surveyRecords() {
+  return allVisibleRecords().filter((record) => hasSurveyResponses(record) || record.estado === "Encuesta enviada");
 }
 
 function queueRecords() {
-  let records = allVisibleRecords().filter((record) => record.resultadoScoring !== "No paso");
+  let records = allVisibleRecords().filter((record) => getEffectiveScoringResult(record) !== "No paso");
   if (state.queueFilter === "Activos") records = records.filter((record) => record.estado !== "Cerrado");
   if (["WhatsApp", "Llamada", "Hibrido"].includes(state.queueFilter)) records = records.filter((record) => record.canalScoring === state.queueFilter);
   return records.sort((a, b) => STATUS_FLOW.indexOf(a.estado) - STATUS_FLOW.indexOf(b.estado));
@@ -396,8 +534,8 @@ function renderMetrics() {
   const visible = allVisibleRecords();
   document.getElementById("metric-contactar").textContent = visible.filter((record) => ["Nuevo ingreso", "Pendiente contacto"].includes(record.estado)).length;
   document.getElementById("metric-enviada").textContent = visible.filter((record) => record.estado === "Encuesta enviada").length;
-  document.getElementById("metric-proceso").textContent = visible.filter((record) => record.estado === "Scoring en proceso").length;
-  document.getElementById("metric-rechazados").textContent = visible.filter((record) => record.resultadoScoring === "No paso").length;
+  document.getElementById("metric-respondidas").textContent = visible.filter((record) => hasSurveyResponses(record)).length;
+  document.getElementById("metric-rechazados").textContent = visible.filter((record) => getEffectiveScoringResult(record) === "No paso").length;
 }
 
 function renderTable() {
@@ -411,24 +549,295 @@ function renderTable() {
   body.innerHTML = records.map((record) => `
     <tr>
       <td>
-        <strong>${record.nombre}</strong>
-        <div>${record.telefono || "-"}</div>
-        <div>${record.nroSolicitud}</div>
+        <strong>${escapeHtml(record.nombre)}</strong>
+        <div>${escapeHtml(record.telefono || "-")}</div>
+        <div>${escapeHtml(record.nroSolicitud)}</div>
       </td>
-      <td>${record.modelo}</td>
-      <td>${record.vendedor}</td>
-      <td>${record.responsable}</td>
-      <td>${record.canalScoring}</td>
+      <td>${escapeHtml(record.modelo)}</td>
+      <td>${escapeHtml(record.vendedor)}</td>
+      <td>${escapeHtml(record.responsable)}</td>
+      <td>${escapeHtml(record.canalScoring)}</td>
       <td>${statusBadge(record.estado)}</td>
       <td>
         <div class="row-actions">
-          <button class="whatsapp-button" type="button" onclick="openWhatsApp('${record.id}')">WhatsApp</button>
-          <button class="call-button" type="button" onclick="callClient('${record.id}')">Llamar</button>
-          <button class="action-button" type="button" onclick="openRecord('${record.id}')">Gestionar</button>
+          <button class="whatsapp-button" type="button" data-record-action="whatsapp" data-record-id="${escapeHtml(record.id)}">WhatsApp</button>
+          <button class="call-button" type="button" data-record-action="call" data-record-id="${escapeHtml(record.id)}">Llamar</button>
+          <button class="action-button" type="button" data-record-action="open" data-record-id="${escapeHtml(record.id)}">Gestionar</button>
         </div>
       </td>
     </tr>
   `).join("") || '<tr><td colspan="7">No hay casos para este filtro.</td></tr>';
+}
+
+function renderSurveySummary() {
+  const records = surveyRecords();
+  const answered = records.filter((record) => hasSurveyResponses(record));
+  const pending = records.filter((record) => !hasSurveyResponses(record) && record.estado === "Encuesta enviada");
+  const review = answered.filter((record) => ["Revisar", "No paso"].includes(getEffectiveScoringResult(record)));
+
+  document.getElementById("survey-summary-grid").innerHTML = [
+    { label: "Respondidas", value: answered.length },
+    { label: "Sin responder", value: pending.length },
+    { label: "Para revisar", value: review.length },
+  ].map((item) => `
+    <article class="survey-summary-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </article>
+  `).join("");
+
+  const importNote = document.getElementById("survey-import-note");
+  if (importNote) {
+    importNote.textContent = `${state.surveyImportMessage || ""}${state.surveyImportTruncated ? " Se muestra una parte de los resultados vinculados." : ""}`.trim();
+  }
+}
+
+function renderSurveyTable() {
+  const body = document.getElementById("survey-table-body");
+  if (state.loading) {
+    body.innerHTML = '<tr><td colspan="6">Cargando...</td></tr>';
+    return;
+  }
+
+  const records = surveyRecords();
+  body.innerHTML = records.map((record) => `
+    <tr>
+      <td>
+        <strong>${escapeHtml(record.nombre)}</strong>
+        <div>${escapeHtml(record.telefono || "-")}</div>
+      </td>
+      <td>${escapeHtml(record.nroSolicitud)}</td>
+      <td>${statusBadge(record.estado)}</td>
+      <td>${resultBadge(getEffectiveScoringResult(record))}</td>
+      <td>${escapeHtml(hasSurveyResponses(record) ? getSurveySummary(record) : "Sin respuestas recibidas")}</td>
+      <td>
+        <div class="row-actions">
+          <button class="action-button" type="button" data-record-action="open" data-record-id="${escapeHtml(record.id)}">Ver ficha</button>
+        </div>
+      </td>
+    </tr>
+  `).join("") || '<tr><td colspan="6">No hay encuestas para mostrar.</td></tr>';
+}
+
+function isScoringResolved(record) {
+  return ["Paso", "Revisar", "No paso"].includes(getEffectiveScoringResult(record));
+}
+
+function wasSurveySent(record) {
+  if (getImportedSurvey(record)) return true;
+  if (record.estado === "Encuesta enviada" || record.proximaAccion === "Esperar respuesta") return true;
+  return (record.gestiones || []).some((gestion) => {
+    const type = normalizeText(gestion.tipo).toLowerCase();
+    const detail = normalizeText(gestion.detalle).toLowerCase();
+    return type === "whatsapp" && detail.includes("encuesta");
+  });
+}
+
+function hasIndicatorResponses(record) {
+  const respuestas = record.respuestas || {};
+  const questionKeys = ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10"];
+  return questionKeys.filter((key) => normalizeText(respuestas[key])).length >= 2 || Boolean(getImportedSurvey(record));
+}
+
+function indicatorPercent(value, total) {
+  return total ? `${Math.round((value / total) * 100)}%` : "-";
+}
+
+function escapeIndicatorHtml(value) {
+  return escapeHtml(value);
+}
+
+function getIndicatorAlert(record) {
+  const respuestas = record.respuestas || {};
+  const imported = getImportedSurvey(record);
+  const effectiveResult = getEffectiveScoringResult(record);
+  if (effectiveResult === "No paso") {
+    return { priority: 1, label: "No paso", tone: "danger", detail: record.motivoResultado || "Revisar rechazo" };
+  }
+  if (requiresRecontact(record)) {
+    return { priority: 2, label: "Recontactar", tone: "warning", detail: record.motivoResultado || "El cliente pidio recontacto" };
+  }
+  if (imported?.signals.includes("SENSITIVE_COMMENT")) {
+    return { priority: 3, label: "Comentario sensible", tone: "warning", detail: "Encuesta vinculada: requiere revision" };
+  }
+  if (effectiveResult === "Revisar") {
+    return { priority: 3, label: "Revisar scoring", tone: "warning", detail: record.motivoResultado || "Tiene observaciones para revisar" };
+  }
+  if (wasSurveySent(record) && !hasIndicatorResponses(record)) {
+    return { priority: 4, label: "Sin respuesta", tone: "info", detail: "Encuesta enviada, sin respuestas registradas" };
+  }
+  return null;
+}
+
+function indicatorBarsMarkup(items, total, emptyMessage) {
+  if (!total) return `<p class="empty-indicator">${emptyMessage}</p>`;
+  return items.map((item) => {
+    const percent = Math.round((item.value / total) * 100);
+    return `
+      <div class="indicator-bar-row">
+        <div class="indicator-bar-label">
+          <span>${escapeHtml(item.label)}</span>
+          <strong>${item.value}</strong>
+        </div>
+        <progress class="indicator-bar-progress ${escapeHtml(item.tone || "")}" max="100" value="${percent}">${percent}%</progress>
+        <small>${indicatorPercent(item.value, total)}</small>
+      </div>
+    `;
+  }).join("");
+}
+
+function getIndicatorSignals(records) {
+  const signals = [
+    { label: "Plan no entendido", code: "PLAN_NO_ENTENDIDO", test: (respuestas) => respuestas.q1 === "No" },
+    { label: "Licitacion no explicada", code: "LICITACION_NO_EXPLICADA", test: (respuestas) => respuestas.q2 === "No" },
+    { label: "Adjudicacion no entendida", code: "ADJUDICACION_NO_ENTENDIDA", test: (respuestas) => respuestas.q3 === "No" },
+    { label: "Diferencia en cuota 2", code: "CUOTA_DIFERENTE", test: (respuestas) => respuestas.q4 === "No" || respuestas.q4 === "Difiere" },
+    { label: "No reconoce al asesor", code: "", test: (respuestas) => respuestas.q7 === "No" },
+    { label: "Puntaje bajo al asesor", code: "", test: (respuestas) => normalizeText(respuestas.q8) && Number(respuestas.q8) <= 2 },
+    { label: "Recontacto solicitado", code: "REQUIERE_RECONTACTO", test: (respuestas) => respuestas.q10 === "Si" },
+    { label: "Comentario sensible", code: "SENSITIVE_COMMENT", test: (respuestas) => /(engano|reclamo|molesto|disconforme|demanda|denuncia)/i.test(respuestas.observacionesScoring || "") },
+  ];
+
+  return signals.map((signal) => ({
+    label: signal.label,
+    value: records.filter((record) => signal.test(record.respuestas || {}) || Boolean(signal.code && getImportedSurvey(record)?.signals.includes(signal.code))).length,
+    tone: "warning",
+  })).filter((signal) => signal.value > 0).sort((a, b) => b.value - a.value);
+}
+
+function renderIndicators() {
+  const kpiGrid = document.getElementById("indicator-kpi-grid");
+  if (!kpiGrid) return;
+
+  const funnel = document.getElementById("indicator-funnel");
+  const results = document.getElementById("indicator-results");
+  const signals = document.getElementById("indicator-signals");
+  const alertsBody = document.getElementById("indicator-alerts-body");
+  const advisorsBody = document.getElementById("indicator-advisors-body");
+
+  const filterNote = document.getElementById("indicator-filter-note");
+  if (state.loading) {
+    kpiGrid.innerHTML = '<article class="indicator-kpi-card"><span>Indicadores</span><strong>Cargando...</strong></article>';
+    funnel.innerHTML = '<p class="empty-indicator">Cargando registros...</p>';
+    results.innerHTML = "";
+    signals.innerHTML = "";
+    alertsBody.innerHTML = '<tr><td colspan="4">Cargando...</td></tr>';
+    advisorsBody.innerHTML = '<tr><td colspan="6">Cargando...</td></tr>';
+    return;
+  }
+
+  const records = allVisibleRecords();
+  const surveysSent = records.filter(wasSurveySent);
+
+  if (filterNote) {
+    const activeFilters = [];
+    if (state.sedeFilter !== "Todas") activeFilters.push(`Sede: ${state.sedeFilter}`);
+    if (state.operatorFilter !== "Todos") activeFilters.push(`Responsable: ${state.operatorFilter}`);
+    if (state.search.trim()) activeFilters.push("Busqueda activa");
+    filterNote.textContent = activeFilters.length ? `Filtros activos: ${activeFilters.join(" | ")}` : "Sin filtros globales activos.";
+  }
+  const answersRegistered = records.filter(hasSurveyResponses);
+  const surveyAnswers = surveysSent.filter(hasSurveyResponses);
+  const scored = records.filter(isScoringResolved);
+  const passed = scored.filter((record) => getEffectiveScoringResult(record) === "Paso");
+  const review = scored.filter((record) => getEffectiveScoringResult(record) === "Revisar");
+  const failed = scored.filter((record) => getEffectiveScoringResult(record) === "No paso");
+  const surveyScored = surveyAnswers.filter(isScoringResolved);
+  const surveyPassed = surveyScored.filter((record) => getEffectiveScoringResult(record) === "Paso");
+  const recontacts = records.filter(requiresRecontact);
+  const alerts = records.map((record) => ({ record, alert: getIndicatorAlert(record) }))
+    .filter((item) => item.alert)
+    .sort((a, b) => a.alert.priority - b.alert.priority);
+
+  const kpis = [
+    { label: "Casos visibles", value: records.length, note: "Base de la lectura" },
+    { label: "Encuestas enviadas", value: surveysSent.length, note: `${indicatorPercent(surveysSent.length, records.length)} de los casos` },
+    { label: "Respuestas cargadas", value: answersRegistered.length, note: surveysSent.length ? `${indicatorPercent(surveyAnswers.length, surveysSent.length)} de respuesta sobre envios` : answersRegistered.length ? "Cargadas por gestion manual" : "Sin respuestas registradas" },
+    { label: "Scoring resuelto", value: scored.length, note: `${indicatorPercent(scored.length, records.length)} de los casos` },
+    { label: "Tasa de prioridad", value: indicatorPercent(alerts.length, records.length), note: `${alerts.length} casos para priorizar`, tone: "attention" },
+  ];
+
+  kpiGrid.innerHTML = kpis.map((item) => `
+    <article class="indicator-kpi-card ${item.tone || ""}">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+      <small>${item.note}</small>
+    </article>
+  `).join("");
+
+  const funnelStages = [
+    { label: "Casos cargados", value: records.length },
+    { label: "Encuestas enviadas", value: surveysSent.length },
+    { label: "Respuestas de encuesta", value: surveyAnswers.length },
+    { label: "Scoring desde encuesta", value: surveyScored.length },
+    { label: "Paso desde encuesta", value: surveyPassed.length },
+  ];
+
+  funnel.innerHTML = records.length ? funnelStages.map((stage, index) => {
+    const base = index === 0 ? records.length : funnelStages[index - 1].value;
+    return `
+      <article class="funnel-step">
+        <span>${stage.label}</span>
+        <strong>${stage.value}</strong>
+        <small>${index === 0 ? "Base visible" : `${indicatorPercent(stage.value, base)} del paso anterior`}</small>
+      </article>
+    `;
+  }).join("") : '<p class="empty-indicator">No hay casos para los filtros seleccionados.</p>';
+
+  results.innerHTML = indicatorBarsMarkup([
+    { label: "Paso", value: passed.length, tone: "success" },
+    { label: "Revisar", value: review.length, tone: "warning" },
+    { label: "No paso", value: failed.length, tone: "danger" },
+  ], scored.length, "Aun no hay scoring resuelto.") + `
+    <div class="indicator-inline-note"><strong>${recontacts.length}</strong> requieren recontacto.</div>
+  `;
+
+  const signalItems = getIndicatorSignals(answersRegistered);
+  signals.innerHTML = signalItems.length
+    ? indicatorBarsMarkup(signalItems, answersRegistered.length, "")
+    : '<p class="empty-indicator">No se detectaron senales de alerta en las respuestas cargadas.</p>';
+
+  alertsBody.innerHTML = alerts.map(({ record, alert }) => `
+    <tr>
+      <td><strong>${escapeIndicatorHtml(record.nombre)}</strong><div class="indicator-cell-note">${escapeIndicatorHtml(record.nroSolicitud)}</div></td>
+      <td><span class="status-chip indicator-alert-${escapeHtml(alert.tone)}">${escapeHtml(alert.label)}</span><div class="indicator-cell-note">${escapeIndicatorHtml(alert.detail)}</div></td>
+      <td>${escapeIndicatorHtml(record.responsable || "-")}</td>
+      <td><button class="action-button" type="button" data-record-action="open" data-record-id="${escapeIndicatorHtml(record.id)}">Gestionar</button></td>
+    </tr>
+  `).join("") || '<tr><td colspan="4">No hay casos que requieran accion inmediata.</td></tr>';
+
+  const advisorMap = new Map();
+  records.forEach((record) => {
+    const name = normalizeText(record.vendedor) || "Sin asesor";
+    if (!advisorMap.has(name)) {
+      advisorMap.set(name, { name, total: 0, scored: 0, passed: 0, alerts: 0, ratings: [] });
+    }
+    const advisor = advisorMap.get(name);
+    advisor.total += 1;
+    if (isScoringResolved(record)) advisor.scored += 1;
+    if (getEffectiveScoringResult(record) === "Paso") advisor.passed += 1;
+    if (getIndicatorAlert(record)) advisor.alerts += 1;
+    const rating = Number(record.respuestas?.q8);
+    if (normalizeText(record.respuestas?.q8) && Number.isFinite(rating)) advisor.ratings.push(rating);
+  });
+
+  const advisors = Array.from(advisorMap.values()).sort((a, b) => b.alerts - a.alerts || b.total - a.total || a.name.localeCompare(b.name));
+  advisorsBody.innerHTML = advisors.map((advisor) => {
+    const average = advisor.ratings.length
+      ? (advisor.ratings.reduce((sum, rating) => sum + rating, 0) / advisor.ratings.length).toFixed(1)
+      : "-";
+    const passRate = advisor.scored ? `${advisor.passed}/${advisor.scored} (${indicatorPercent(advisor.passed, advisor.scored)})` : "-";
+    return `
+      <tr>
+        <td><strong>${escapeIndicatorHtml(advisor.name)}</strong></td>
+        <td>${advisor.total}</td>
+        <td>${advisor.scored}</td>
+        <td>${passRate}</td>
+        <td>${advisor.alerts}</td>
+        <td>${average === "-" ? average : `${average} / 5 (${advisor.ratings.length})`}</td>
+      </tr>
+    `;
+  }).join("") || '<tr><td colspan="6">No hay asesores en los registros seleccionados.</td></tr>';
 }
 
 function renderRejectedTable() {
@@ -442,13 +851,13 @@ function renderRejectedTable() {
   body.innerHTML = records.map((record) => `
     <tr>
       <td>
-        <strong>${record.nombre}</strong>
-        <div>${record.telefono || "-"}</div>
+        <strong>${escapeHtml(record.nombre)}</strong>
+        <div>${escapeHtml(record.telefono || "-")}</div>
       </td>
-      <td>${record.nroSolicitud}</td>
-      <td>${record.vendedor}</td>
-      <td>${record.motivoResultado || "-"}</td>
-      <td><button class="action-button" type="button" onclick="openRecord('${record.id}')">Ver caso</button></td>
+      <td>${escapeHtml(record.nroSolicitud)}</td>
+      <td>${escapeHtml(record.vendedor)}</td>
+      <td>${escapeHtml(record.motivoResultado || "-")}</td>
+      <td><button class="action-button" type="button" data-record-action="open" data-record-id="${escapeHtml(record.id)}">Ver caso</button></td>
     </tr>
   `).join("") || '<tr><td colspan="5">No hay rechazados.</td></tr>';
 }
@@ -460,17 +869,27 @@ function renderQueue() {
     return;
   }
 
-  container.innerHTML = queueRecords().map((record) => `
-    <article class="queue-card ${record.id === state.selectedId ? "active" : ""}" onclick="openRecord('${record.id}')">
+  container.innerHTML = queueRecords().map((rawRecord) => {
+    const record = {
+      ...rawRecord,
+      sede: escapeHtml(rawRecord.sede),
+      nroSolicitud: escapeHtml(rawRecord.nroSolicitud),
+      canalScoring: escapeHtml(rawRecord.canalScoring),
+      responsable: escapeHtml(rawRecord.responsable),
+      proximaAccion: escapeHtml(rawRecord.proximaAccion),
+    };
+    return `
+    <article class="queue-card ${record.id === state.selectedId ? "active" : ""}" data-record-action="open" data-record-id="${escapeHtml(record.id)}" role="button" tabindex="0">
       <div class="queue-card-top">
-        <strong>${record.nombre}</strong>
+        <strong>${escapeHtml(record.nombre)}</strong>
         ${statusBadge(record.estado)}
       </div>
-      <div class="queue-meta">${record.sede} · ${record.nroSolicitud}</div>
-      <div class="queue-meta">${record.canalScoring} · ${record.responsable}</div>
+      <div class="queue-meta">${record.sede} Â· ${record.nroSolicitud}</div>
+      <div class="queue-meta">${record.canalScoring} Â· ${record.responsable}</div>
       <div class="queue-meta">${record.proximaAccion}</div>
     </article>
-  `).join("") || '<article class="queue-card"><p>Sin casos.</p></article>';
+  `;
+  }).join("") || '<article class="queue-card"><p>Sin casos.</p></article>';
 }
 
 function renderCallMode(record) {
@@ -479,6 +898,30 @@ function renderCallMode(record) {
   document.getElementById("call-mode-on").classList.toggle("hidden", !isCallMode);
   document.getElementById("manual-mode-button").classList.toggle("hidden", isCallMode);
   document.getElementById("contact-flow-note").classList.toggle("hidden", isCallMode);
+}
+
+function renderManualStep() {
+  const isCallMode = Boolean(state.callModeRecordId);
+  const steps = Array.from(document.querySelectorAll(".step-card"));
+  steps.forEach((step, index) => {
+    step.classList.toggle("active", isCallMode && index === state.currentStep);
+  });
+
+  if (!isCallMode) return;
+
+  const progress = Math.round(((state.currentStep + 1) / MANUAL_STEPS_TOTAL) * 100);
+  const progressBar = document.getElementById("step-progress-bar");
+  if (progressBar) progressBar.value = progress;
+  document.getElementById("step-counter").textContent = state.currentStep < 10
+    ? `Pregunta ${state.currentStep + 1} de 10`
+    : state.currentStep === 10
+      ? "Observaciones"
+      : "Resumen";
+
+  document.getElementById("step-prev-button").classList.toggle("hidden", state.currentStep === 0);
+  document.getElementById("step-next-button").classList.toggle("hidden", state.currentStep >= MANUAL_STEPS_TOTAL - 1);
+  document.getElementById("save-scoring-button").classList.toggle("hidden", state.currentStep < MANUAL_STEPS_TOTAL - 1);
+  document.getElementById("calculate-button").classList.toggle("hidden", state.currentStep < 10);
 }
 
 function renderDetail() {
@@ -494,19 +937,19 @@ function renderDetail() {
   empty.classList.add("hidden");
   detail.classList.remove("hidden");
 
-  document.getElementById("detail-sede").textContent = `${record.sede} · Solicitud ${record.nroSolicitud}`;
+  document.getElementById("detail-sede").textContent = `${record.sede} Â· Solicitud ${record.nroSolicitud}`;
   document.getElementById("detail-name").textContent = record.nombre;
-  document.getElementById("detail-plan").textContent = `${record.modelo} · ${record.vendedor}`;
+  document.getElementById("detail-plan").textContent = `${record.modelo} Â· ${record.vendedor}`;
   document.getElementById("detail-status").outerHTML = statusBadge(record.estado).replace("<span", '<span id="detail-status"');
   document.getElementById("detail-result").outerHTML = resultBadge(record.resultadoScoring).replace("<span", '<span id="detail-result"');
-  document.getElementById("detail-owner").textContent = `${record.responsable} · ${record.canalScoring}`;
+  document.getElementById("detail-owner").textContent = `${record.responsable} Â· ${record.canalScoring}`;
 
   document.getElementById("detail-contact-lines").innerHTML = `
-    <div><strong>Telefono:</strong> ${record.telefono || "-"}</div>
-    <div><strong>Mail:</strong> ${record.mail || "-"}</div>
-    <div><strong>Monto cuota 2:</strong> ${record.cuotaDos || "-"}</div>
-    <div><strong>Pago:</strong> ${record.tipoPago || "-"}</div>
-    <div><strong>Observaciones:</strong> ${record.observaciones || "-"}</div>
+    <div><strong>Telefono:</strong> ${escapeHtml(record.telefono || "-")}</div>
+    <div><strong>Mail:</strong> ${escapeHtml(record.mail || "-")}</div>
+    <div><strong>Monto cuota 2:</strong> ${escapeHtml(record.cuotaDos || "-")}</div>
+    <div><strong>Pago:</strong> ${escapeHtml(record.tipoPago || "-")}</div>
+    <div><strong>Observaciones:</strong> ${escapeHtml(record.observaciones || "-")}</div>
   `;
 
   setSelectValue("detail-responsable", record.responsable || state.catalogs.operadores[0] || "Recepcion");
@@ -533,12 +976,13 @@ function renderDetail() {
 
   document.getElementById("timeline-list").innerHTML = (record.gestiones || []).slice().reverse().map((entry) => `
     <article class="timeline-item">
-      <small>${entry.fecha} · ${entry.tipo}${entry.responsable ? ` · ${entry.responsable}` : ""}</small>
+      <small>${entry.fecha} Â· ${entry.tipo}${entry.responsable ? ` Â· ${entry.responsable}` : ""}</small>
       <p>${entry.detalle}</p>
     </article>
   `).join("") || '<article class="timeline-item"><p>Sin movimientos.</p></article>';
 
   renderCallMode(record);
+  renderManualStep();
 }
 
 function setSelectValue(id, value) {
@@ -556,6 +1000,7 @@ function openRecord(id) {
   state.selectedId = id;
   if (state.callModeRecordId && state.callModeRecordId !== id) {
     state.callModeRecordId = null;
+    state.currentStep = 0;
   }
   switchView("gestion");
   renderAll();
@@ -564,8 +1009,26 @@ function openRecord(id) {
 function enableCallMode(id) {
   state.selectedId = id;
   state.callModeRecordId = id;
+  state.currentStep = 0;
   switchView("gestion");
   renderAll();
+}
+
+function nextManualStep() {
+  if (state.currentStep < MANUAL_STEPS_TOTAL - 1) {
+    state.currentStep += 1;
+    if (state.currentStep === MANUAL_STEPS_TOTAL - 1) {
+      calculateScoringFromForm();
+    }
+    renderManualStep();
+  }
+}
+
+function prevManualStep() {
+  if (state.currentStep > 0) {
+    state.currentStep -= 1;
+    renderManualStep();
+  }
 }
 
 async function persistRecord(record, gestion) {
@@ -585,17 +1048,18 @@ async function openWhatsApp(id) {
   }
 
   state.callModeRecordId = null;
-  const message = encodeURIComponent(`Hola ${record.nombre}, te escribimos de Autosol por tu solicitud ${record.nroSolicitud}. Queremos avanzar con el scoring de tu plan. Te compartimos el acceso: ${record.encuestaLink}`);
-  window.open(`https://wa.me/54${phone}?text=${message}`, "_blank");
+  state.currentStep = 0;
+  const message = encodeURIComponent(`Hola ${record.nombre}, te escribimos de Autosol por tu solicitud ${record.nroSolicitud}. Queremos avanzar con el scoring de tu plan.`);
+  window.open(`https://wa.me/54${phone}?text=${message}`, "_blank", "noopener,noreferrer");
 
   const nextRecord = {
     ...record,
-    estado: record.estado === "Nuevo ingreso" ? "Encuesta enviada" : record.estado,
-    proximaAccion: "Esperar respuesta",
+    estado: record.estado === "Nuevo ingreso" ? "Pendiente contacto" : record.estado,
+    proximaAccion: "Preparar contacto",
     ultimaGestion: today(),
   };
 
-  const gestion = buildGestionPayload(record.id, "WhatsApp", "Se preparo el mensaje de WhatsApp con acceso a encuesta.", record.responsable);
+  const gestion = buildGestionPayload(record.id, "WhatsApp", "Se preparo un mensaje de WhatsApp de seguimiento.", record.responsable);
   await runMutation(() => persistRecord(nextRecord, gestion), "WhatsApp registrado.");
 }
 
@@ -690,7 +1154,7 @@ async function saveScoring(event) {
   };
 
   const gestion = buildGestionPayload(record.id, "Scoring", `Se guardo scoring con resultado ${scoring.result}. ${scoring.reason}.`, record.responsable);
-  await runMutation(() => persistRecord(nextRecord, gestion), "Scoring guardado.");
+  await runMutation(() => persistRecord(nextRecord, gestion), "Scoring guardado con exito.");
 }
 
 async function saveOperationalChanges() {
@@ -741,49 +1205,6 @@ async function addTimelineNote() {
   textarea.value = "";
 }
 
-async function copySurveyLink() {
-  const record = state.records.find((item) => item.id === state.selectedId);
-  if (!record) return;
-  try {
-    await navigator.clipboard.writeText(record.encuestaLink);
-    notify("Link copiado.");
-  } catch (error) {
-    notify("No se pudo copiar el link.");
-  }
-}
-
-function openSurvey() {
-  const record = state.records.find((item) => item.id === state.selectedId);
-  if (!record) return;
-  window.open(record.encuestaLink, "_blank");
-}
-
-function exportCsv() {
-  const headers = ["NOMBRE", "SOLICITUD", "ASESOR", "RESPONSABLE", "CANAL", "ESTADO", "RESULTADO", "MOTIVO"];
-  const rows = allVisibleRecords().map((record) => [
-    record.nombre,
-    record.nroSolicitud,
-    record.vendedor,
-    record.responsable,
-    record.canalScoring,
-    record.estado,
-    record.resultadoScoring,
-    record.motivoResultado,
-  ]);
-
-  const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell || "").replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `scoring-center-${today()}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
 async function createRecord(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -824,7 +1245,7 @@ async function createRecord(event) {
     motivoResultado: "Pendiente de gestion",
     requiereRecontacto: "No definido",
     ultimaGestion: today(),
-    encuestaLink: buildSurveyLink(nroSolicitud, nombre),
+    encuestaLink: "",
     respuestas: {},
     creadoEn: new Date().toISOString(),
   };
@@ -845,6 +1266,7 @@ async function createRecord(event) {
   getFormField("canalScoring").value = state.catalogs.canales[0] || "WhatsApp";
   state.selectedId = record.id;
   state.callModeRecordId = null;
+  state.currentStep = 0;
   switchView("gestion");
 }
 
@@ -887,6 +1309,9 @@ function renderAll() {
   renderMetrics();
   renderBoardSegments();
   renderTable();
+  renderSurveySummary();
+  renderSurveyTable();
+  renderIndicators();
   renderRejectedTable();
   renderQueue();
   renderDetail();
@@ -912,6 +1337,24 @@ function openNextPending() {
 function bindEvents() {
   document.querySelectorAll(".nav-tab").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
+  });
+
+  document.addEventListener("click", (event) => {
+    const control = event.target instanceof Element ? event.target.closest("[data-record-action]") : null;
+    if (!control) return;
+    const id = control.dataset.recordId;
+    if (!id) return;
+    if (control.dataset.recordAction === "open") openRecord(id);
+    if (control.dataset.recordAction === "whatsapp") openWhatsApp(id);
+    if (control.dataset.recordAction === "call") callClient(id);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const control = event.target instanceof Element ? event.target.closest(".queue-card[data-record-action='open']") : null;
+    if (!control) return;
+    event.preventDefault();
+    openRecord(control.dataset.recordId);
   });
 
   document.querySelectorAll("[data-board-filter]").forEach((button) => {
@@ -948,32 +1391,116 @@ function bindEvents() {
 
   document.getElementById("solicitud-form").addEventListener("submit", createRecord);
   document.getElementById("fill-demo-button").addEventListener("click", fillDemo);
-  document.getElementById("calculate-button").addEventListener("click", calculateScoringFromForm);
+  document.getElementById("calculate-button").addEventListener("click", () => {
+    calculateScoringFromForm();
+    if (state.currentStep < MANUAL_STEPS_TOTAL - 1) {
+      state.currentStep = MANUAL_STEPS_TOTAL - 1;
+      renderManualStep();
+    }
+  });
   document.getElementById("scoring-form").addEventListener("submit", saveScoring);
   document.getElementById("save-ops-button").addEventListener("click", saveOperationalChanges);
   document.getElementById("advance-status-button").addEventListener("click", advanceSelectedStatus);
   document.getElementById("add-note-button").addEventListener("click", addTimelineNote);
-  document.getElementById("copy-link-button").addEventListener("click", copySurveyLink);
-  document.getElementById("open-survey-button").addEventListener("click", openSurvey);
   document.getElementById("send-whatsapp-button").addEventListener("click", () => openWhatsApp(state.selectedId));
   document.getElementById("call-button").addEventListener("click", () => callClient(state.selectedId));
   document.getElementById("manual-mode-button").addEventListener("click", () => {
-    if (state.selectedId) {
-      enableCallMode(state.selectedId);
-    }
+    if (state.selectedId) enableCallMode(state.selectedId);
   });
-  document.getElementById("export-button").addEventListener("click", exportCsv);
+  document.getElementById("step-next-button").addEventListener("click", nextManualStep);
+  document.getElementById("step-prev-button").addEventListener("click", prevManualStep);
   document.getElementById("refresh-button").addEventListener("click", () => refreshData().catch((error) => notify(error.message || error)));
   document.getElementById("take-next-button").addEventListener("click", openNextPending);
   document.getElementById("open-contact-button").addEventListener("click", () => jumpToBoardFilter("Pendiente contacto"));
   document.getElementById("open-sent-button").addEventListener("click", () => jumpToBoardFilter("Encuesta enviada"));
 }
 
-async function initApp() {
-  bindEvents();
+function setAuthMessage(message = "") {
+  const element = document.getElementById("auth-message");
+  if (element) element.textContent = message;
+}
+
+function setAuthMode(mode = "login") {
+  document.getElementById("auth-login-form")?.classList.toggle("hidden", mode !== "login");
+  document.getElementById("auth-invite-form")?.classList.toggle("hidden", mode !== "invite");
+  document.getElementById("auth-recovery-form")?.classList.toggle("hidden", mode !== "recovery");
+  document.getElementById("auth-recovery-request")?.classList.toggle("hidden", mode !== "login");
+}
+
+function clearSensitiveUi() {
+  ["detail-sede", "detail-name", "detail-plan", "detail-owner", "detail-contact-lines", "timeline-list"].forEach((id) => {
+    const element = document.getElementById(id);
+    if (element) element.replaceChildren();
+  });
+  document.querySelectorAll("#app-shell input, #app-shell textarea").forEach((element) => {
+    if (element.type === "checkbox" || element.type === "radio") element.checked = false;
+    else element.value = "";
+  });
+}
+
+function showAuthGate(message = "") {
+  const gate = document.getElementById("auth-gate");
+  const shell = document.getElementById("app-shell");
+  gate?.classList.remove("hidden");
+  shell?.classList.add("hidden");
+  shell?.setAttribute("aria-hidden", "true");
+  if (message) setAuthMessage(message);
+}
+
+function updateRoleUi() {
+  const supervisor = isSupervisor();
+  document.querySelectorAll("[data-supervisor-only]").forEach((element) => {
+    element.classList.toggle("hidden", !supervisor);
+  });
+  if (!supervisor && state.currentView === "indicadores") switchView("pendientes");
+}
+
+function resetSession() {
+  state.auth.recovery = false;
+  state.auth.user = null;
+  state.records = [];
+  state.importedSurveys = [];
+  state.surveyImportMessage = "";
+  state.surveyImportTruncated = false;
+  state.selectedId = null;
+  state.callModeRecordId = null;
+  state.loading = false;
+  clearSensitiveUi();
+  updateRoleUi();
+  if (state.eventsBound) renderAll();
+  const userLabel = document.getElementById("auth-user-label");
+  if (userLabel) userLabel.textContent = "";
+  showAuthGate();
+}
+
+async function activateAuthenticatedSession(user) {
+  if (!user) return;
+  if (!hasPanelAccess(user)) {
+    resetSession();
+    setAuthMessage("Tu cuenta no tiene un rol autorizado. Pedi al administrador que asigne un rol de Scoring Center.");
+    return;
+  }
+
+  const shell = document.getElementById("app-shell");
+  if (state.auth.user?.id === user.id && shell && !shell.classList.contains("hidden")) return;
+
+  state.auth.user = user;
+  state.auth.recovery = false;
+  updateRoleUi();
+  const userLabel = document.getElementById("auth-user-label");
+  if (userLabel) userLabel.textContent = user.email || "Usuario autorizado";
+  document.getElementById("auth-gate")?.classList.add("hidden");
+  shell?.classList.remove("hidden");
+  shell?.setAttribute("aria-hidden", "false");
+
+  if (!state.eventsBound) {
+    bindEvents();
+    state.eventsBound = true;
+  }
   applyCatalogs({ operadores: DEFAULT_OPERATORS, canales: DEFAULT_CHANNELS });
   const fechaField = getFormField("fecha");
   if (fechaField) fechaField.value = today();
+  state.loading = true;
   renderAll();
   try {
     await refreshData();
@@ -981,12 +1508,132 @@ async function initApp() {
     state.loading = false;
     renderAll();
     console.error(error);
-    notify(`No pude conectar la app con Sheets. ${error.message || error}`);
+    if (/(sesion|permisos)/i.test(String(error?.message || ""))) resetSession();
+    else notify(`No pude cargar los datos autorizados. ${error.message || error}`);
   }
 }
 
-initApp();
+async function handleAuthLogin(event) {
+  event.preventDefault();
+  const client = window.ScoringIdentity;
+  if (!client) return setAuthMessage("El acceso interno no esta disponible todavia.");
+  const email = document.getElementById("auth-email").value.trim();
+  const password = document.getElementById("auth-password").value;
+  setAuthMessage("");
+  try {
+    const result = await client.signIn(email, password);
+    document.getElementById("auth-password").value = "";
+    await activateAuthenticatedSession(result.user);
+  } catch (error) {
+    setAuthMessage(error.message || "No se pudo iniciar sesion.");
+  }
+}
 
-window.openRecord = openRecord;
-window.openWhatsApp = openWhatsApp;
-window.callClient = callClient;
+function matchingPassword(firstId, secondId) {
+  const first = document.getElementById(firstId).value;
+  const second = document.getElementById(secondId).value;
+  if (first.length < 12 || first !== second) {
+    setAuthMessage("Usa una contrasena de al menos 12 caracteres y repetila igual.");
+    return "";
+  }
+  return first;
+}
+
+async function handleInviteAcceptance(event) {
+  event.preventDefault();
+  const password = matchingPassword("auth-invite-password", "auth-invite-confirm");
+  if (!password) return;
+  try {
+    const result = await window.ScoringIdentity.finishInvite(password);
+    await activateAuthenticatedSession(result.user);
+  } catch (error) {
+    setAuthMessage(error.message || "No se pudo activar la invitacion.");
+  }
+}
+
+async function handlePasswordRecovery(event) {
+  event.preventDefault();
+  const password = matchingPassword("auth-recovery-password", "auth-recovery-confirm");
+  if (!password) return;
+  try {
+    const result = await window.ScoringIdentity.finishRecovery(password);
+    await activateAuthenticatedSession(result.user);
+  } catch (error) {
+    setAuthMessage(error.message || "No se pudo guardar la contrasena.");
+  }
+}
+
+async function requestPasswordRecovery() {
+  const email = document.getElementById("auth-email").value.trim();
+  if (!email) return setAuthMessage("Escribi tu correo laboral para recuperar el acceso.");
+  try {
+    await window.ScoringIdentity.requestRecovery(email);
+    setAuthMessage("Si la cuenta existe, vas a recibir un correo para restablecer la contrasena.");
+  } catch (error) {
+    setAuthMessage(error.message || "No se pudo iniciar la recuperacion.");
+  }
+}
+
+async function logoutFromApp() {
+  try {
+    await window.ScoringIdentity?.signOut();
+  } catch (error) {
+    console.error(error);
+  }
+  resetSession();
+}
+
+function bindAuthEvents() {
+  document.getElementById("auth-login-form").addEventListener("submit", handleAuthLogin);
+  document.getElementById("auth-invite-form").addEventListener("submit", handleInviteAcceptance);
+  document.getElementById("auth-recovery-form").addEventListener("submit", handlePasswordRecovery);
+  document.getElementById("auth-recovery-request").addEventListener("click", requestPasswordRecovery);
+  document.getElementById("logout-button").addEventListener("click", logoutFromApp);
+}
+
+async function initApp() {
+  bindAuthEvents();
+  const client = window.ScoringIdentity;
+  if (!client) {
+    showAuthGate("El acceso interno no esta disponible todavia.");
+    return;
+  }
+
+  client.subscribe((event, user) => {
+    if (event === "logout") {
+      resetSession();
+      return;
+    }
+    if (event === "recovery") {
+      state.auth.recovery = true;
+      setAuthMode("recovery");
+      showAuthGate("Defini una nueva contrasena para continuar.");
+      return;
+    }
+    if (user && state.auth.initialized) activateAuthenticatedSession(user);
+  });
+
+  const session = await client.initialize();
+  state.auth.initialized = true;
+  if (session.flow === "invite") {
+    setAuthMode("invite");
+    showAuthGate("Crea tu contrasena para activar el acceso invitado.");
+    return;
+  }
+  if (session.flow === "recovery") {
+    state.auth.recovery = true;
+    setAuthMode("recovery");
+    showAuthGate("Defini una nueva contrasena para continuar.");
+    return;
+  }
+  if (session.flow === "error") {
+    setAuthMode("login");
+    showAuthGate(session.message || "No se pudo validar el acceso.");
+    return;
+  }
+  setAuthMode("login");
+  if (session.user) await activateAuthenticatedSession(session.user);
+  else showAuthGate();
+}
+
+initApp();

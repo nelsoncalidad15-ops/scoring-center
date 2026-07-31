@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
@@ -10,7 +10,62 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <main id="auth-gate" class="auth-gate" aria-live="polite">
+      <section class="auth-card">
+        <div class="brand-row">
+          <div class="brand-mark">A</div>
+          <div>
+            <p class="eyebrow">Autosol interno</p>
+            <h1>Scoring Center</h1>
+          </div>
+        </div>
+        <p class="auth-copy">Acceso exclusivo para el equipo autorizado.</p>
+
+        <form id="auth-login-form" class="auth-form">
+          <label>
+            <span>Correo laboral</span>
+            <input id="auth-email" type="email" autocomplete="email" required />
+          </label>
+          <label>
+            <span>Contrasena</span>
+            <input id="auth-password" type="password" autocomplete="current-password" minlength="12" required />
+          </label>
+          <button class="primary-button" type="submit">Ingresar</button>
+        </form>
+
+        <button class="text-button" id="auth-recovery-request" type="button">Olvide mi contrasena</button>
+
+        <form id="auth-invite-form" class="auth-form hidden">
+          <p class="auth-copy">Defini una contrasena para aceptar tu invitacion.</p>
+          <label>
+            <span>Nueva contrasena</span>
+            <input id="auth-invite-password" type="password" autocomplete="new-password" minlength="12" required />
+          </label>
+          <label>
+            <span>Repetir contrasena</span>
+            <input id="auth-invite-confirm" type="password" autocomplete="new-password" minlength="12" required />
+          </label>
+          <button class="primary-button" type="submit">Activar acceso</button>
+        </form>
+
+        <form id="auth-recovery-form" class="auth-form hidden">
+          <p class="auth-copy">Defini una nueva contrasena para tu cuenta.</p>
+          <label>
+            <span>Nueva contrasena</span>
+            <input id="auth-recovery-password" type="password" autocomplete="new-password" minlength="12" required />
+          </label>
+          <label>
+            <span>Repetir contrasena</span>
+            <input id="auth-recovery-confirm" type="password" autocomplete="new-password" minlength="12" required />
+          </label>
+          <button class="primary-button" type="submit">Guardar contrasena</button>
+        </form>
+
+        <p id="auth-message" class="auth-message" role="status"></p>
+      </section>
+    </main>
+
+    <div id="app-shell" class="app-shell hidden" aria-hidden="true">
       <header class="topbar">
         <div class="brand-row">
           <div class="brand-mark">A</div>
@@ -36,7 +91,8 @@
             </select>
           </label>
           <button class="ghost-button" id="refresh-button" type="button">Actualizar</button>
-          <button class="ghost-button" id="export-button" type="button">Exportar</button>
+          <span id="auth-user-label" class="auth-user-label"></span>
+          <button class="ghost-button" id="logout-button" type="button">Salir</button>
         </div>
       </header>
 
@@ -44,6 +100,8 @@
         <button class="nav-tab active" data-view="pendientes">Pendientes</button>
         <button class="nav-tab" data-view="carga">Nuevos</button>
         <button class="nav-tab" data-view="gestion">Gestion</button>
+        <button class="nav-tab" data-view="encuestas">Encuestas</button>
+        <button class="nav-tab" data-view="indicadores" data-supervisor-only>Indicadores</button>
         <button class="nav-tab" data-view="rechazados">Rechazados</button>
       </nav>
 
@@ -59,8 +117,8 @@
               <strong id="metric-enviada">0</strong>
             </article>
             <article class="metric-card">
-              <span>En scoring</span>
-              <strong id="metric-proceso">0</strong>
+              <span>Encuestas respondidas</span>
+              <strong id="metric-respondidas">0</strong>
             </article>
             <article class="metric-card danger">
               <span>Rechazados</span>
@@ -75,7 +133,7 @@
                 <h2>Pendientes</h2>
               </div>
               <div class="toolbar">
-                <input id="search-input" type="search" placeholder="Buscar nombre, solicitud o vendedor" />
+                <input id="search-input" type="search" placeholder="Buscar nombre, solicitud o asesor" />
                 <select id="status-filter">
                   <option value="Todas">Todos los estados</option>
                   <option value="Nuevo ingreso">Nuevo ingreso</option>
@@ -142,13 +200,13 @@
                 <div class="form-section">
                   <div class="field-grid cols-2">
                     <label><span>Nro de solicitud</span><input name="nroSolicitud" type="text" required /></label>
-                    <label><span>Nombre y Apellido</span><input name="nombre" type="text" required /></label>
+                    <label><span>Nombre y apellido</span><input name="nombre" type="text" required /></label>
                     <label><span>Celular</span><input name="telefono" type="text" inputmode="tel" required /></label>
                     <label><span>Mail</span><input name="mail" type="email" /></label>
                     <label><span>Modelo suscripto / falta plan</span><input name="modelo" type="text" required /></label>
                     <label><span>Nombre del Asesor</span><input name="vendedor" type="text" required /></label>
                     <label><span>Monto 2da cuota (aprox)</span><input name="cuotaDos" type="text" /></label>
-                    <label><span>Como seguira pagando</span><input name="tipoPago" type="text" /></label>
+                    <label><span>Como seguira pagando su plan</span><input name="tipoPago" type="text" /></label>
                   </div>
                   <div class="field-grid cols-1 top-gap">
                     <label><span>Observaciones</span><textarea name="observaciones" rows="4"></textarea></label>
@@ -187,22 +245,22 @@
             <aside class="panel-card helper-panel">
               <div class="panel-head">
                 <div>
-                  <p class="eyebrow">Uso</p>
-                  <h2>Flujo simple</h2>
+                  <p class="eyebrow">Flujo</p>
+                  <h2>Uso diario</h2>
                 </div>
               </div>
               <div class="simple-list">
                 <article class="simple-item">
                   <strong>1. Carga recepcion</strong>
-                  <span>Solo los datos que le pasa el asesor.</span>
+                  <span>Se guardan solo los datos que pasan los asesores.</span>
                 </article>
                 <article class="simple-item">
-                  <strong>2. WhatsApp o llamada</strong>
-                  <span>Si mandas encuesta no hace falta abrir preguntas.</span>
+                  <strong>2. Contacto</strong>
+                  <span>WhatsApp con encuesta o llamada manual.</span>
                 </article>
                 <article class="simple-item">
-                  <strong>3. Guardado final</strong>
-                  <span>Si llamas, ahi si aparece el scoring manual.</span>
+                  <strong>3. Revision</strong>
+                  <span>Se controla respuesta de encuesta o scoring manual.</span>
                 </article>
               </div>
             </aside>
@@ -240,10 +298,6 @@
                     <h2 id="detail-name"></h2>
                     <p class="detail-subline" id="detail-plan"></p>
                   </div>
-                  <div class="detail-head-actions">
-                    <button class="ghost-button" type="button" id="copy-link-button">Copiar link</button>
-                    <button class="primary-button" type="button" id="open-survey-button">Abrir encuesta</button>
-                  </div>
                 </div>
 
                 <div class="badge-row">
@@ -259,9 +313,9 @@
                     <div class="action-row">
                       <button class="whatsapp-button" type="button" id="send-whatsapp-button">Enviar WhatsApp</button>
                       <button class="call-button" type="button" id="call-button">Llamar</button>
-                      <button class="ghost-button hidden" type="button" id="manual-mode-button">Continuar llamada</button>
+                      <button class="ghost-button" type="button" id="manual-mode-button">Scoring manual</button>
                     </div>
-                    <div class="soft-note" id="contact-flow-note">Si envias la encuesta por WhatsApp, no hace falta abrir las preguntas manuales.</div>
+                    <div class="soft-note" id="contact-flow-note">WhatsApp si queres mandar la encuesta. Scoring manual si queres hacer preguntas vos mismo, con o sin llamada.</div>
                   </section>
 
                   <section class="mini-card">
@@ -282,8 +336,8 @@
                 <section class="panel-subsection call-mode-shell">
                   <div class="call-mode-off" id="call-mode-off">
                     <p class="eyebrow">Scoring manual</p>
-                    <h3>Las preguntas aparecen al entrar en llamada</h3>
-                    <p>Este bloque queda oculto hasta que hagas clic en `Llamar` o `Continuar llamada`.</p>
+                    <h3>Abre este bloque cuando necesites hacer preguntas</h3>
+                    <p>Podes usarlo despues de llamar o simplemente para cargar el scoring manual sin disparar la llamada desde la pantalla.</p>
                   </div>
 
                   <div class="call-mode-on hidden" id="call-mode-on">
@@ -292,36 +346,61 @@
                         <p class="eyebrow">Scoring</p>
                         <h3>Manual por llamada</h3>
                       </div>
-                      <span class="mode-pill">Modo llamada</span>
+                      <div class="step-tools">
+                        <span class="mode-pill">Modo llamada</span>
+                        <span class="step-counter" id="step-counter">Pregunta 1 de 10</span>
+                      </div>
                     </div>
 
+                    <progress class="step-progress" id="step-progress-bar" max="100" value="8">8%</progress>
+
                     <form id="scoring-form" class="scoring-form">
-                      <div class="questions-grid">
+                      <div class="step-card active" data-step="0">
                         <label><span>1. Entendia el plan</span><select name="q1"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Dudas">Dudas</option></select></label>
+                      </div>
+                      <div class="step-card" data-step="1">
                         <label><span>2. Explicaron licitacion</span><select name="q2"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Parcial">Parcial</option></select></label>
+                      </div>
+                      <div class="step-card" data-step="2">
                         <label><span>3. Entendio adjudicacion</span><select name="q3"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="No recuerda">No recuerda</option></select></label>
+                      </div>
+                      <div class="step-card" data-step="3">
                         <label><span>4. Cuota 2 correcta</span><select name="q4"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Difiere">Difiere</option></select></label>
+                      </div>
+                      <div class="step-card" data-step="4">
                         <label><span>5. Pago primera cuota</span><select name="q5"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Pendiente">Pendiente</option></select></label>
+                      </div>
+                      <div class="step-card" data-step="5">
                         <label><span>6. Medio de pago</span><input name="q6" type="text" /></label>
+                      </div>
+                      <div class="step-card" data-step="6">
                         <label><span>7. Reconoce vendedor</span><select name="q7"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="Mas o menos">Mas o menos</option></select></label>
+                      </div>
+                      <div class="step-card" data-step="7">
                         <label><span>8. Puntaje vendedor</span><select name="q8"><option value="">Seleccionar</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label>
+                      </div>
+                      <div class="step-card" data-step="8">
                         <label><span>9. Beneficio prometido</span><select name="q9"><option value="">Seleccionar</option><option value="Si">Si</option><option value="No">No</option><option value="No aplica">No aplica</option></select></label>
+                      </div>
+                      <div class="step-card" data-step="9">
                         <label><span>10. Recontacto</span><select name="q10"><option value="">Seleccionar</option><option value="No">No</option><option value="Si">Si</option></select></label>
                       </div>
-
-                      <div class="field-grid cols-1 top-gap">
-                        <label><span>Observaciones</span><textarea name="observacionesScoring" rows="4"></textarea></label>
+                      <div class="step-card" data-step="10">
+                        <label><span>Observaciones</span><textarea name="observacionesScoring" rows="5"></textarea></label>
+                      </div>
+                      <div class="step-card" data-step="11">
+                        <div class="field-grid cols-3">
+                          <label><span>Resultado</span><input id="result-display" type="text" readonly /></label>
+                          <label><span>Motivo</span><input id="reason-display" type="text" readonly /></label>
+                          <label><span>Recontacto</span><input id="recontact-display" type="text" readonly /></label>
+                        </div>
                       </div>
 
-                      <div class="field-grid cols-3 top-gap">
-                        <label><span>Resultado</span><input id="result-display" type="text" readonly /></label>
-                        <label><span>Motivo</span><input id="reason-display" type="text" readonly /></label>
-                        <label><span>Recontacto</span><input id="recontact-display" type="text" readonly /></label>
-                      </div>
-
-                      <div class="form-actions top-gap">
+                      <div class="step-actions top-gap">
+                        <button type="button" class="ghost-button" id="step-prev-button">Anterior</button>
                         <button type="button" class="ghost-button" id="calculate-button">Calcular</button>
-                        <button type="submit" class="primary-button">Guardar scoring</button>
+                        <button type="button" class="primary-button" id="step-next-button">Siguiente</button>
+                        <button type="submit" class="primary-button hidden" id="save-scoring-button">Guardar scoring</button>
                       </div>
                     </form>
                   </div>
@@ -344,6 +423,132 @@
             </article>
           </div>
         </section>
+
+        <section id="view-encuestas" class="view">
+          <article class="panel-card">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">Encuestas</p>
+                <h2>Encuestas respondidas</h2>
+              </div>
+            </div>
+
+            <div class="survey-summary-grid" id="survey-summary-grid"></div>
+            <p id="survey-import-note" class="soft-note">Las respuestas vinculadas se muestran solo a supervisores autorizados.</p>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Solicitud</th>
+                    <th>Estado</th>
+                    <th>Resultado</th>
+                    <th>Respuesta clave</th>
+                    <th>Accion</th>
+                  </tr>
+                </thead>
+                <tbody id="survey-table-body"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+        <section id="view-indicadores" class="view" data-supervisor-only>
+          <article class="panel-card indicator-intro">
+            <div class="panel-head compact-head">
+              <div>
+                <p class="eyebrow">Indicadores</p>
+                <h2>Lectura operativa del scoring</h2>
+              </div>
+              <span class="neutral-chip">Se actualiza con los registros cargados</span>
+            </div>
+            <p id="indicator-filter-note">Los indicadores respetan los filtros globales de sede, responsable y b&uacute;squeda.</p>
+            <p class="indicator-source-note">El embudo muestra encuestas registradas; los resultados de scoring incluyen tambi&eacute;n gestiones manuales.</p>
+          </article>
+
+          <div class="indicator-kpi-grid" id="indicator-kpi-grid"></div>
+
+          <div class="indicator-layout">
+            <article class="panel-card">
+              <div class="panel-head compact-head">
+                <div>
+                  <p class="eyebrow">Embudo</p>
+                  <h2>Encuestas y scoring</h2>
+                </div>
+              </div>
+              <div class="indicator-funnel" id="indicator-funnel"></div>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-head compact-head">
+                <div>
+                  <p class="eyebrow">Resultado</p>
+                  <h2>Estado del scoring</h2>
+                </div>
+              </div>
+              <div class="indicator-bars" id="indicator-results"></div>
+            </article>
+          </div>
+
+          <div class="indicator-layout">
+            <article class="panel-card">
+              <div class="panel-head compact-head">
+                <div>
+                  <p class="eyebrow">Calidad</p>
+                  <h2>Se&ntilde;ales frecuentes</h2>
+                </div>
+              </div>
+              <div class="indicator-bars" id="indicator-signals"></div>
+            </article>
+
+            <article class="panel-card">
+              <div class="panel-head compact-head">
+                <div>
+                  <p class="eyebrow">Acci&oacute;n</p>
+                  <h2>Casos a priorizar</h2>
+                </div>
+              </div>
+              <div class="table-wrap indicator-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Alerta</th>
+                      <th>Responsable</th>
+                      <th>Acci&oacute;n</th>
+                    </tr>
+                  </thead>
+                  <tbody id="indicator-alerts-body"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+
+          <article class="panel-card">
+            <div class="panel-head compact-head">
+              <div>
+                <p class="eyebrow">Equipo comercial</p>
+                <h2>Seguimiento por asesor</h2>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Asesor</th>
+                    <th>Casos</th>
+                    <th>Con scoring</th>
+                    <th>Paso</th>
+                    <th>Alertas</th>
+                    <th>Puntaje medio (n)</th>
+                  </tr>
+                </thead>
+                <tbody id="indicator-advisors-body"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
 
         <section id="view-rechazados" class="view">
           <article class="panel-card">
@@ -373,6 +578,7 @@
       </main>
     </div>
 
-    <script src="app.js"></script>
+    <script defer src="assets/auth-client.js"></script>
+    <script defer src="app.js"></script>
   </body>
 </html>
