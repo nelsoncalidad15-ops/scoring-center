@@ -10,7 +10,62 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <main id="auth-gate" class="auth-gate" aria-live="polite">
+      <section class="auth-card">
+        <div class="brand-row">
+          <div class="brand-mark">A</div>
+          <div>
+            <p class="eyebrow">Autosol interno</p>
+            <h1>Scoring Center</h1>
+          </div>
+        </div>
+        <p class="auth-copy">Acceso exclusivo para el equipo autorizado.</p>
+
+        <form id="auth-login-form" class="auth-form">
+          <label>
+            <span>Correo laboral</span>
+            <input id="auth-email" type="email" autocomplete="email" required />
+          </label>
+          <label>
+            <span>Contrasena</span>
+            <input id="auth-password" type="password" autocomplete="current-password" minlength="12" required />
+          </label>
+          <button class="primary-button" type="submit">Ingresar</button>
+        </form>
+
+        <button class="text-button" id="auth-recovery-request" type="button">Olvide mi contrasena</button>
+
+        <form id="auth-invite-form" class="auth-form hidden">
+          <p class="auth-copy">Defini una contrasena para aceptar tu invitacion.</p>
+          <label>
+            <span>Nueva contrasena</span>
+            <input id="auth-invite-password" type="password" autocomplete="new-password" minlength="12" required />
+          </label>
+          <label>
+            <span>Repetir contrasena</span>
+            <input id="auth-invite-confirm" type="password" autocomplete="new-password" minlength="12" required />
+          </label>
+          <button class="primary-button" type="submit">Activar acceso</button>
+        </form>
+
+        <form id="auth-recovery-form" class="auth-form hidden">
+          <p class="auth-copy">Defini una nueva contrasena para tu cuenta.</p>
+          <label>
+            <span>Nueva contrasena</span>
+            <input id="auth-recovery-password" type="password" autocomplete="new-password" minlength="12" required />
+          </label>
+          <label>
+            <span>Repetir contrasena</span>
+            <input id="auth-recovery-confirm" type="password" autocomplete="new-password" minlength="12" required />
+          </label>
+          <button class="primary-button" type="submit">Guardar contrasena</button>
+        </form>
+
+        <p id="auth-message" class="auth-message" role="status"></p>
+      </section>
+    </main>
+
+    <div id="app-shell" class="app-shell hidden" aria-hidden="true">
       <header class="topbar">
         <div class="brand-row">
           <div class="brand-mark">A</div>
@@ -36,7 +91,8 @@
             </select>
           </label>
           <button class="ghost-button" id="refresh-button" type="button">Actualizar</button>
-          <button class="ghost-button" id="export-button" type="button">Exportar</button>
+          <span id="auth-user-label" class="auth-user-label"></span>
+          <button class="ghost-button" id="logout-button" type="button">Salir</button>
         </div>
       </header>
 
@@ -45,7 +101,7 @@
         <button class="nav-tab" data-view="carga">Nuevos</button>
         <button class="nav-tab" data-view="gestion">Gestion</button>
         <button class="nav-tab" data-view="encuestas">Encuestas</button>
-        <button class="nav-tab" data-view="indicadores">Indicadores</button>
+        <button class="nav-tab" data-view="indicadores" data-supervisor-only>Indicadores</button>
         <button class="nav-tab" data-view="rechazados">Rechazados</button>
       </nav>
 
@@ -242,10 +298,6 @@
                     <h2 id="detail-name"></h2>
                     <p class="detail-subline" id="detail-plan"></p>
                   </div>
-                  <div class="detail-head-actions">
-                    <button class="ghost-button" type="button" id="copy-link-button">Copiar link</button>
-                    <button class="primary-button" type="button" id="open-survey-button">Abrir encuesta</button>
-                  </div>
                 </div>
 
                 <div class="badge-row">
@@ -300,9 +352,7 @@
                       </div>
                     </div>
 
-                    <div class="step-progress">
-                      <div class="step-progress-bar" id="step-progress-bar"></div>
-                    </div>
+                    <progress class="step-progress" id="step-progress-bar" max="100" value="8">8%</progress>
 
                     <form id="scoring-form" class="scoring-form">
                       <div class="step-card active" data-step="0">
@@ -384,6 +434,7 @@
             </div>
 
             <div class="survey-summary-grid" id="survey-summary-grid"></div>
+            <p id="survey-import-note" class="soft-note">Las respuestas vinculadas se muestran solo a supervisores autorizados.</p>
 
             <div class="table-wrap">
               <table>
@@ -402,7 +453,7 @@
             </div>
           </article>
         </section>
-        <section id="view-indicadores" class="view">
+        <section id="view-indicadores" class="view" data-supervisor-only>
           <article class="panel-card indicator-intro">
             <div class="panel-head compact-head">
               <div>
@@ -527,6 +578,7 @@
       </main>
     </div>
 
-    <script src="app.js"></script>
+    <script defer src="assets/auth-client.js"></script>
+    <script defer src="app.js"></script>
   </body>
 </html>

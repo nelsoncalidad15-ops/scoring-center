@@ -1,14 +1,17 @@
 # Scoring Cent
 
-Sistema interno de recepcion y Contact Center para carga, contacto y scoring de solicitudes.
+Panel interno para gestionar solicitudes, scoring e indicadores.
 
-## Arquitectura segura
+> Segui [SECURITY_SETUP.md](SECURITY_SETUP.md) antes de promover la rama. La planilla existente de encuestas queda intacta y solo se lee mediante un bridge independiente.
 
-- Frontend publico en Netlify.
+## Arquitectura
+
 - El navegador nunca habla directo con Google Sheets.
-- El frontend llama a Netlify Functions.
-- Netlify Functions llaman a Apps Script con `BACKEND_SECRET`.
-- Apps Script escribe y lee la planilla privada en Google Sheets usando `SHEET_ID`.
+- Netlify Identity exige una sesion y las Functions validan roles en servidor.
+- La planilla de encuestas existente se usa solo como fuente de lectura normalizada.
+- El bridge no devuelve identificadores, contactos, links ni texto libre de la fuente.
+- La planilla operativa es una Sheet privada nueva, separada de la fuente.
+- Las APIs no se almacenan en cache y fallan cerradas ante falta de sesion o configuracion.
 
 ## Estructura de hojas sugerida
 
@@ -19,28 +22,18 @@ Sistema interno de recepcion y Contact Center para carga, contacto y scoring de 
 
 ## Variables seguras en Netlify
 
-- `APPS_SCRIPT_URL`
-- `BACKEND_SECRET`
-- `SITE_ORIGIN`
-
-## Script Properties en Apps Script
-
-- `SHEET_ID`
-- `BACKEND_SECRET`
+Las variables y las Script Properties requeridas estan documentadas en [SECURITY_SETUP.md](SECURITY_SETUP.md). No guardar secretos ni IDs de la fuente en el repositorio, navegador o chat.
 
 ## Flujo operativo
 
 1. Recepcion carga una solicitud nueva.
-2. El caso queda visible para cualquier operador.
-3. El operador puede mandar WhatsApp, llamar o trabajar en modo hibrido.
-4. El scoring deja resultado, motivo, recontacto y bitacora.
-5. Todo queda persistido en la base privada de Sheets.
+2. El equipo autorizado gestiona contacto y scoring manual.
+3. El bridge vincula respuestas ya existentes por una clave opaca del caso.
+4. Supervisores ven indicadores y senales normalizadas, sin texto libre de la fuente.
+5. La bitacora queda en la planilla operativa privada.
 
 ## Estado actual
 
-- Interfaz interna avanzada: lista.
-- Repo local inicializado: listo.
-- Netlify Functions creadas: listo.
-- Plantilla Apps Script creada: listo.
-- Falta terminar el reemplazo completo de `localStorage` por API en `app.js`.
-- Falta crear/subir el repo remoto `scoring-cent` y vincularlo a Netlify.
+- Acceso protegido, Functions y bridges: implementados en esta rama.
+- Antes de produccion: configurar Netlify Identity, las dos Apps Script, las variables y probar un deploy preview.
+- Esta fase no distribuye enlaces de encuestas; ese flujo se disena despues en una base separada.
