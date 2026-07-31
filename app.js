@@ -1,4 +1,4 @@
-const API_ENDPOINTS = {
+﻿const API_ENDPOINTS = {
   records: "/.netlify/functions/records",
   catalogs: "/.netlify/functions/catalogs",
 };
@@ -24,6 +24,7 @@ const STATUS_INFO = {
 
 const DEFAULT_OPERATORS = ["Recepcion", "Contact Center 1", "Contact Center 2", "Supervisor"];
 const DEFAULT_CHANNELS = ["WhatsApp", "Llamada", "Hibrido"];
+const MANUAL_STEPS_TOTAL = 12;
 
 const state = {
   records: [],
@@ -36,6 +37,7 @@ const state = {
   queueFilter: "Activos",
   selectedId: null,
   callModeRecordId: null,
+  currentStep: 0,
   catalogs: {
     operadores: [...DEFAULT_OPERATORS],
     canales: [...DEFAULT_CHANNELS],
@@ -173,6 +175,19 @@ function parseResponses(raw) {
   } catch (error) {
     return {};
   }
+}
+
+function hasSurveyResponses(record) {
+  const respuestas = record.respuestas || {};
+  return Object.keys(respuestas).some((key) => normalizeText(respuestas[key]));
+}
+
+function getSurveySummary(record) {
+  const respuestas = record.respuestas || {};
+  if (normalizeText(respuestas.q4)) return `P4: ${respuestas.q4}`;
+  if (normalizeText(respuestas.q1)) return `P1: ${respuestas.q1}`;
+  if (normalizeText(respuestas.q7)) return `P7: ${respuestas.q7}`;
+  return "Sin detalle";
 }
 
 function apiRecordToUiRecord(record, gestiones) {
@@ -359,7 +374,7 @@ function allVisibleRecords() {
     const bySede = state.sedeFilter === "Todas" || record.sede === state.sedeFilter;
     const byOperator = state.operatorFilter === "Todos" || record.responsable === state.operatorFilter;
     const query = state.search.trim().toLowerCase();
-    const haystack = `${record.nombre} ${record.dni} ${record.nroSolicitud} ${record.vendedor} ${record.modelo}`.toLowerCase();
+    const haystack = `${record.nombre} ${record.nroSolicitud} ${record.vendedor} ${record.modelo}`.toLowerCase();
     const bySearch = !query || haystack.includes(query);
     return bySede && byOperator && bySearch;
   });
@@ -381,6 +396,10 @@ function rejectedRecords() {
   return allVisibleRecords().filter((record) => record.resultadoScoring === "No paso");
 }
 
+function surveyRecords() {
+  return allVisibleRecords().filter((record) => hasSurveyResponses(record) || record.estado === "Encuesta enviada");
+}
+
 function queueRecords() {
   let records = allVisibleRecords().filter((record) => record.resultadoScoring !== "No paso");
   if (state.queueFilter === "Activos") records = records.filter((record) => record.estado !== "Cerrado");
@@ -396,7 +415,7 @@ function renderMetrics() {
   const visible = allVisibleRecords();
   document.getElementById("metric-contactar").textContent = visible.filter((record) => ["Nuevo ingreso", "Pendiente contacto"].includes(record.estado)).length;
   document.getElementById("metric-enviada").textContent = visible.filter((record) => record.estado === "Encuesta enviada").length;
-  document.getElementById("metric-proceso").textContent = visible.filter((record) => record.estado === "Scoring en proceso").length;
+  document.getElementById("metric-respondidas").textContent = visible.filter((record) => hasSurveyResponses(record)).length;
   document.getElementById("metric-rechazados").textContent = visible.filter((record) => record.resultadoScoring === "No paso").length;
 }
 
@@ -429,6 +448,279 @@ function renderTable() {
       </td>
     </tr>
   `).join("") || '<tr><td colspan="7">No hay casos para este filtro.</td></tr>';
+}
+
+function renderSurveySummary() {
+  const records = surveyRecords();
+  const answered = records.filter((record) => hasSurveyResponses(record));
+  const pending = records.filter((record) => !hasSurveyResponses(record) && record.estado === "Encuesta enviada");
+  const review = answered.filter((record) => record.resultadoScoring === "Revisar" || record.resultadoScoring === "No paso");
+
+  document.getElementById("survey-summary-grid").innerHTML = [
+    { label: "Respondidas", value: answered.length },
+    { label: "Sin responder", value: pending.length },
+    { label: "Para revisar", value: review.length },
+  ].map((item) => `
+    <article class="survey-summary-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </article>
+  `).join("");
+}
+
+function renderSurveyTable() {
+  const body = document.getElementById("survey-table-body");
+  if (state.loading) {
+    body.innerHTML = '<tr><td colspan="6">Cargando...</td></tr>';
+    return;
+  }
+
+  const records = surveyRecords();
+  body.innerHTML = records.map((record) => `
+    <tr>
+      <td>
+        <strong>${record.nombre}</strong>
+        <div>${record.telefono || "-"}</div>
+      </td>
+      <td>${record.nroSolicitud}</td>
+      <td>${statusBadge(record.estado)}</td>
+      <td>${resultBadge(record.resultadoScoring)}</td>
+      <td>${hasSurveyResponses(record) ? getSurveySummary(record) : "Sin respuestas recibidas"}</td>
+      <td>
+        <div class="row-actions">
+          <button class="action-button" type="button" onclick="openRecord('${record.id}')">Ver ficha</button>
+        </div>
+      </td>
+    </tr>
+  `).join("") || '<tr><td colspan="6">No hay encuestas para mostrar.</td></tr>';
+}
+
+function isScoringResolved(record) {
+  return ["Paso", "Revisar", "No paso"].includes(normalizeText(record.resultadoScoring));
+}
+
+function wasSurveySent(record) {
+  if (record.estado === "Encuesta enviada" || record.proximaAccion === "Esperar respuesta") return true;
+  return (record.gestiones || []).some((gestion) => {
+    const type = normalizeText(gestion.tipo).toLowerCase();
+    const detail = normalizeText(gestion.detalle).toLowerCase();
+    return type === "whatsapp" && detail.includes("encuesta");
+  });
+}
+
+function hasIndicatorResponses(record) {
+  const respuestas = record.respuestas || {};
+  const questionKeys = ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10"];
+  return questionKeys.filter((key) => normalizeText(respuestas[key])).length >= 2;
+}
+
+function indicatorPercent(value, total) {
+  return total ? `${Math.round((value / total) * 100)}%` : "-";
+}
+
+function escapeIndicatorHtml(value) {
+  const entities = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  };
+  return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]);
+}
+
+function getIndicatorAlert(record) {
+  const respuestas = record.respuestas || {};
+  if (record.resultadoScoring === "No paso") {
+    return { priority: 1, label: "No paso", tone: "danger", detail: record.motivoResultado || "Revisar rechazo" };
+  }
+  if (record.requiereRecontacto === "Si" || respuestas.q10 === "Si") {
+    return { priority: 2, label: "Recontactar", tone: "warning", detail: record.motivoResultado || "El cliente pidio recontacto" };
+  }
+  if (record.resultadoScoring === "Revisar") {
+    return { priority: 3, label: "Revisar scoring", tone: "warning", detail: record.motivoResultado || "Tiene observaciones para revisar" };
+  }
+  if (wasSurveySent(record) && !hasIndicatorResponses(record)) {
+    return { priority: 4, label: "Sin respuesta", tone: "info", detail: "Encuesta enviada, sin respuestas registradas" };
+  }
+  return null;
+}
+
+function indicatorBarsMarkup(items, total, emptyMessage) {
+  if (!total) return `<p class="empty-indicator">${emptyMessage}</p>`;
+  return items.map((item) => {
+    const percent = Math.round((item.value / total) * 100);
+    return `
+      <div class="indicator-bar-row">
+        <div class="indicator-bar-label">
+          <span>${item.label}</span>
+          <strong>${item.value}</strong>
+        </div>
+        <div class="indicator-bar-track"><span class="${item.tone || ""}" style="width: ${percent}%"></span></div>
+        <small>${indicatorPercent(item.value, total)}</small>
+      </div>
+    `;
+  }).join("");
+}
+
+function getIndicatorSignals(records) {
+  const signals = [
+    { label: "Plan no entendido", test: (respuestas) => respuestas.q1 === "No" },
+    { label: "Licitacion no explicada", test: (respuestas) => respuestas.q2 === "No" },
+    { label: "Adjudicacion no entendida", test: (respuestas) => respuestas.q3 === "No" },
+    { label: "Diferencia en cuota 2", test: (respuestas) => respuestas.q4 === "No" || respuestas.q4 === "Difiere" },
+    { label: "No reconoce al asesor", test: (respuestas) => respuestas.q7 === "No" },
+    { label: "Puntaje bajo al asesor", test: (respuestas) => normalizeText(respuestas.q8) && Number(respuestas.q8) <= 2 },
+    { label: "Recontacto solicitado", test: (respuestas) => respuestas.q10 === "Si" },
+    { label: "Comentario sensible", test: (respuestas) => /(engano|reclamo|molesto|disconforme|demanda|denuncia)/i.test(respuestas.observacionesScoring || "") },
+  ];
+
+  return signals.map((signal) => ({
+    label: signal.label,
+    value: records.filter((record) => signal.test(record.respuestas || {})).length,
+    tone: "warning",
+  })).filter((signal) => signal.value > 0).sort((a, b) => b.value - a.value);
+}
+
+function renderIndicators() {
+  const kpiGrid = document.getElementById("indicator-kpi-grid");
+  if (!kpiGrid) return;
+
+  const funnel = document.getElementById("indicator-funnel");
+  const results = document.getElementById("indicator-results");
+  const signals = document.getElementById("indicator-signals");
+  const alertsBody = document.getElementById("indicator-alerts-body");
+  const advisorsBody = document.getElementById("indicator-advisors-body");
+
+  const filterNote = document.getElementById("indicator-filter-note");
+  if (state.loading) {
+    kpiGrid.innerHTML = '<article class="indicator-kpi-card"><span>Indicadores</span><strong>Cargando...</strong></article>';
+    funnel.innerHTML = '<p class="empty-indicator">Cargando registros...</p>';
+    results.innerHTML = "";
+    signals.innerHTML = "";
+    alertsBody.innerHTML = '<tr><td colspan="4">Cargando...</td></tr>';
+    advisorsBody.innerHTML = '<tr><td colspan="6">Cargando...</td></tr>';
+    return;
+  }
+
+  const records = allVisibleRecords();
+  const surveysSent = records.filter(wasSurveySent);
+
+  if (filterNote) {
+    const activeFilters = [];
+    if (state.sedeFilter !== "Todas") activeFilters.push(`Sede: ${state.sedeFilter}`);
+    if (state.operatorFilter !== "Todos") activeFilters.push(`Responsable: ${state.operatorFilter}`);
+    if (state.search.trim()) activeFilters.push("Busqueda activa");
+    filterNote.textContent = activeFilters.length ? `Filtros activos: ${activeFilters.join(" | ")}` : "Sin filtros globales activos.";
+  }
+  const answersRegistered = records.filter(hasIndicatorResponses);
+  const surveyAnswers = surveysSent.filter(hasIndicatorResponses);
+  const scored = records.filter(isScoringResolved);
+  const passed = scored.filter((record) => record.resultadoScoring === "Paso");
+  const review = scored.filter((record) => record.resultadoScoring === "Revisar");
+  const failed = scored.filter((record) => record.resultadoScoring === "No paso");
+  const surveyScored = surveyAnswers.filter(isScoringResolved);
+  const surveyPassed = surveyScored.filter((record) => record.resultadoScoring === "Paso");
+  const recontacts = records.filter((record) => record.requiereRecontacto === "Si" || record.respuestas?.q10 === "Si");
+  const alerts = records.map((record) => ({ record, alert: getIndicatorAlert(record) }))
+    .filter((item) => item.alert)
+    .sort((a, b) => a.alert.priority - b.alert.priority);
+
+  const kpis = [
+    { label: "Casos visibles", value: records.length, note: "Base de la lectura" },
+    { label: "Encuestas enviadas", value: surveysSent.length, note: `${indicatorPercent(surveysSent.length, records.length)} de los casos` },
+    { label: "Respuestas cargadas", value: answersRegistered.length, note: surveysSent.length ? `${indicatorPercent(surveyAnswers.length, surveysSent.length)} de respuesta sobre envios` : answersRegistered.length ? "Cargadas por gestion manual" : "Sin respuestas registradas" },
+    { label: "Scoring resuelto", value: scored.length, note: `${indicatorPercent(scored.length, records.length)} de los casos` },
+    { label: "Tasa de prioridad", value: indicatorPercent(alerts.length, records.length), note: `${alerts.length} casos para priorizar`, tone: "attention" },
+  ];
+
+  kpiGrid.innerHTML = kpis.map((item) => `
+    <article class="indicator-kpi-card ${item.tone || ""}">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+      <small>${item.note}</small>
+    </article>
+  `).join("");
+
+  const funnelStages = [
+    { label: "Casos cargados", value: records.length },
+    { label: "Encuestas enviadas", value: surveysSent.length },
+    { label: "Respuestas de encuesta", value: surveyAnswers.length },
+    { label: "Scoring desde encuesta", value: surveyScored.length },
+    { label: "Paso desde encuesta", value: surveyPassed.length },
+  ];
+
+  funnel.innerHTML = records.length ? funnelStages.map((stage, index) => {
+    const base = index === 0 ? records.length : funnelStages[index - 1].value;
+    return `
+      <article class="funnel-step">
+        <span>${stage.label}</span>
+        <strong>${stage.value}</strong>
+        <small>${index === 0 ? "Base visible" : `${indicatorPercent(stage.value, base)} del paso anterior`}</small>
+      </article>
+    `;
+  }).join("") : '<p class="empty-indicator">No hay casos para los filtros seleccionados.</p>';
+
+  results.innerHTML = indicatorBarsMarkup([
+    { label: "Paso", value: passed.length, tone: "success" },
+    { label: "Revisar", value: review.length, tone: "warning" },
+    { label: "No paso", value: failed.length, tone: "danger" },
+  ], scored.length, "Aun no hay scoring resuelto.") + `
+    <div class="indicator-inline-note"><strong>${recontacts.length}</strong> requieren recontacto.</div>
+  `;
+
+  const signalItems = getIndicatorSignals(answersRegistered);
+  signals.innerHTML = signalItems.length
+    ? indicatorBarsMarkup(signalItems, answersRegistered.length, "")
+    : '<p class="empty-indicator">No se detectaron senales de alerta en las respuestas cargadas.</p>';
+
+  alertsBody.innerHTML = alerts.map(({ record, alert }) => `
+    <tr>
+      <td><strong>${escapeIndicatorHtml(record.nombre)}</strong><div class="indicator-cell-note">${escapeIndicatorHtml(record.nroSolicitud)}</div></td>
+      <td><span class="status-chip indicator-alert-${alert.tone}">${alert.label}</span><div class="indicator-cell-note">${escapeIndicatorHtml(alert.detail)}</div></td>
+      <td>${escapeIndicatorHtml(record.responsable || "-")}</td>
+      <td><button class="action-button" type="button" data-indicator-record-id="${escapeIndicatorHtml(record.id)}">Gestionar</button></td>
+    </tr>
+  `).join("") || '<tr><td colspan="4">No hay casos que requieran accion inmediata.</td></tr>';
+
+
+  if (alertsBody.querySelectorAll) {
+    alertsBody.querySelectorAll("[data-indicator-record-id]").forEach((button) => {
+      button.addEventListener("click", () => openRecord(button.dataset.indicatorRecordId));
+    });
+  }
+  const advisorMap = new Map();
+  records.forEach((record) => {
+    const name = normalizeText(record.vendedor) || "Sin asesor";
+    if (!advisorMap.has(name)) {
+      advisorMap.set(name, { name, total: 0, scored: 0, passed: 0, alerts: 0, ratings: [] });
+    }
+    const advisor = advisorMap.get(name);
+    advisor.total += 1;
+    if (isScoringResolved(record)) advisor.scored += 1;
+    if (record.resultadoScoring === "Paso") advisor.passed += 1;
+    if (getIndicatorAlert(record)) advisor.alerts += 1;
+    const rating = Number(record.respuestas?.q8);
+    if (normalizeText(record.respuestas?.q8) && Number.isFinite(rating)) advisor.ratings.push(rating);
+  });
+
+  const advisors = Array.from(advisorMap.values()).sort((a, b) => b.alerts - a.alerts || b.total - a.total || a.name.localeCompare(b.name));
+  advisorsBody.innerHTML = advisors.map((advisor) => {
+    const average = advisor.ratings.length
+      ? (advisor.ratings.reduce((sum, rating) => sum + rating, 0) / advisor.ratings.length).toFixed(1)
+      : "-";
+    const passRate = advisor.scored ? `${advisor.passed}/${advisor.scored} (${indicatorPercent(advisor.passed, advisor.scored)})` : "-";
+    return `
+      <tr>
+        <td><strong>${escapeIndicatorHtml(advisor.name)}</strong></td>
+        <td>${advisor.total}</td>
+        <td>${advisor.scored}</td>
+        <td>${passRate}</td>
+        <td>${advisor.alerts}</td>
+        <td>${average === "-" ? average : `${average} / 5 (${advisor.ratings.length})`}</td>
+      </tr>
+    `;
+  }).join("") || '<tr><td colspan="6">No hay asesores en los registros seleccionados.</td></tr>';
 }
 
 function renderRejectedTable() {
@@ -466,8 +758,8 @@ function renderQueue() {
         <strong>${record.nombre}</strong>
         ${statusBadge(record.estado)}
       </div>
-      <div class="queue-meta">${record.sede} · ${record.nroSolicitud}</div>
-      <div class="queue-meta">${record.canalScoring} · ${record.responsable}</div>
+      <div class="queue-meta">${record.sede} Â· ${record.nroSolicitud}</div>
+      <div class="queue-meta">${record.canalScoring} Â· ${record.responsable}</div>
       <div class="queue-meta">${record.proximaAccion}</div>
     </article>
   `).join("") || '<article class="queue-card"><p>Sin casos.</p></article>';
@@ -479,6 +771,29 @@ function renderCallMode(record) {
   document.getElementById("call-mode-on").classList.toggle("hidden", !isCallMode);
   document.getElementById("manual-mode-button").classList.toggle("hidden", isCallMode);
   document.getElementById("contact-flow-note").classList.toggle("hidden", isCallMode);
+}
+
+function renderManualStep() {
+  const isCallMode = Boolean(state.callModeRecordId);
+  const steps = Array.from(document.querySelectorAll(".step-card"));
+  steps.forEach((step, index) => {
+    step.classList.toggle("active", isCallMode && index === state.currentStep);
+  });
+
+  if (!isCallMode) return;
+
+  const progress = ((state.currentStep + 1) / MANUAL_STEPS_TOTAL) * 100;
+  document.getElementById("step-progress-bar").style.width = `${progress}%`;
+  document.getElementById("step-counter").textContent = state.currentStep < 10
+    ? `Pregunta ${state.currentStep + 1} de 10`
+    : state.currentStep === 10
+      ? "Observaciones"
+      : "Resumen";
+
+  document.getElementById("step-prev-button").classList.toggle("hidden", state.currentStep === 0);
+  document.getElementById("step-next-button").classList.toggle("hidden", state.currentStep >= MANUAL_STEPS_TOTAL - 1);
+  document.getElementById("save-scoring-button").classList.toggle("hidden", state.currentStep < MANUAL_STEPS_TOTAL - 1);
+  document.getElementById("calculate-button").classList.toggle("hidden", state.currentStep < 10);
 }
 
 function renderDetail() {
@@ -494,12 +809,12 @@ function renderDetail() {
   empty.classList.add("hidden");
   detail.classList.remove("hidden");
 
-  document.getElementById("detail-sede").textContent = `${record.sede} · Solicitud ${record.nroSolicitud}`;
+  document.getElementById("detail-sede").textContent = `${record.sede} Â· Solicitud ${record.nroSolicitud}`;
   document.getElementById("detail-name").textContent = record.nombre;
-  document.getElementById("detail-plan").textContent = `${record.modelo} · ${record.vendedor}`;
+  document.getElementById("detail-plan").textContent = `${record.modelo} Â· ${record.vendedor}`;
   document.getElementById("detail-status").outerHTML = statusBadge(record.estado).replace("<span", '<span id="detail-status"');
   document.getElementById("detail-result").outerHTML = resultBadge(record.resultadoScoring).replace("<span", '<span id="detail-result"');
-  document.getElementById("detail-owner").textContent = `${record.responsable} · ${record.canalScoring}`;
+  document.getElementById("detail-owner").textContent = `${record.responsable} Â· ${record.canalScoring}`;
 
   document.getElementById("detail-contact-lines").innerHTML = `
     <div><strong>Telefono:</strong> ${record.telefono || "-"}</div>
@@ -533,12 +848,13 @@ function renderDetail() {
 
   document.getElementById("timeline-list").innerHTML = (record.gestiones || []).slice().reverse().map((entry) => `
     <article class="timeline-item">
-      <small>${entry.fecha} · ${entry.tipo}${entry.responsable ? ` · ${entry.responsable}` : ""}</small>
+      <small>${entry.fecha} Â· ${entry.tipo}${entry.responsable ? ` Â· ${entry.responsable}` : ""}</small>
       <p>${entry.detalle}</p>
     </article>
   `).join("") || '<article class="timeline-item"><p>Sin movimientos.</p></article>';
 
   renderCallMode(record);
+  renderManualStep();
 }
 
 function setSelectValue(id, value) {
@@ -556,6 +872,7 @@ function openRecord(id) {
   state.selectedId = id;
   if (state.callModeRecordId && state.callModeRecordId !== id) {
     state.callModeRecordId = null;
+    state.currentStep = 0;
   }
   switchView("gestion");
   renderAll();
@@ -564,8 +881,26 @@ function openRecord(id) {
 function enableCallMode(id) {
   state.selectedId = id;
   state.callModeRecordId = id;
+  state.currentStep = 0;
   switchView("gestion");
   renderAll();
+}
+
+function nextManualStep() {
+  if (state.currentStep < MANUAL_STEPS_TOTAL - 1) {
+    state.currentStep += 1;
+    if (state.currentStep === MANUAL_STEPS_TOTAL - 1) {
+      calculateScoringFromForm();
+    }
+    renderManualStep();
+  }
+}
+
+function prevManualStep() {
+  if (state.currentStep > 0) {
+    state.currentStep -= 1;
+    renderManualStep();
+  }
 }
 
 async function persistRecord(record, gestion) {
@@ -585,6 +920,7 @@ async function openWhatsApp(id) {
   }
 
   state.callModeRecordId = null;
+  state.currentStep = 0;
   const message = encodeURIComponent(`Hola ${record.nombre}, te escribimos de Autosol por tu solicitud ${record.nroSolicitud}. Queremos avanzar con el scoring de tu plan. Te compartimos el acceso: ${record.encuestaLink}`);
   window.open(`https://wa.me/54${phone}?text=${message}`, "_blank");
 
@@ -690,7 +1026,7 @@ async function saveScoring(event) {
   };
 
   const gestion = buildGestionPayload(record.id, "Scoring", `Se guardo scoring con resultado ${scoring.result}. ${scoring.reason}.`, record.responsable);
-  await runMutation(() => persistRecord(nextRecord, gestion), "Scoring guardado.");
+  await runMutation(() => persistRecord(nextRecord, gestion), "Scoring guardado con exito.");
 }
 
 async function saveOperationalChanges() {
@@ -845,6 +1181,7 @@ async function createRecord(event) {
   getFormField("canalScoring").value = state.catalogs.canales[0] || "WhatsApp";
   state.selectedId = record.id;
   state.callModeRecordId = null;
+  state.currentStep = 0;
   switchView("gestion");
 }
 
@@ -887,6 +1224,9 @@ function renderAll() {
   renderMetrics();
   renderBoardSegments();
   renderTable();
+  renderSurveySummary();
+  renderSurveyTable();
+  renderIndicators();
   renderRejectedTable();
   renderQueue();
   renderDetail();
@@ -948,7 +1288,13 @@ function bindEvents() {
 
   document.getElementById("solicitud-form").addEventListener("submit", createRecord);
   document.getElementById("fill-demo-button").addEventListener("click", fillDemo);
-  document.getElementById("calculate-button").addEventListener("click", calculateScoringFromForm);
+  document.getElementById("calculate-button").addEventListener("click", () => {
+    calculateScoringFromForm();
+    if (state.currentStep < MANUAL_STEPS_TOTAL - 1) {
+      state.currentStep = MANUAL_STEPS_TOTAL - 1;
+      renderManualStep();
+    }
+  });
   document.getElementById("scoring-form").addEventListener("submit", saveScoring);
   document.getElementById("save-ops-button").addEventListener("click", saveOperationalChanges);
   document.getElementById("advance-status-button").addEventListener("click", advanceSelectedStatus);
@@ -958,10 +1304,10 @@ function bindEvents() {
   document.getElementById("send-whatsapp-button").addEventListener("click", () => openWhatsApp(state.selectedId));
   document.getElementById("call-button").addEventListener("click", () => callClient(state.selectedId));
   document.getElementById("manual-mode-button").addEventListener("click", () => {
-    if (state.selectedId) {
-      enableCallMode(state.selectedId);
-    }
+    if (state.selectedId) enableCallMode(state.selectedId);
   });
+  document.getElementById("step-next-button").addEventListener("click", nextManualStep);
+  document.getElementById("step-prev-button").addEventListener("click", prevManualStep);
   document.getElementById("export-button").addEventListener("click", exportCsv);
   document.getElementById("refresh-button").addEventListener("click", () => refreshData().catch((error) => notify(error.message || error)));
   document.getElementById("take-next-button").addEventListener("click", openNextPending);
